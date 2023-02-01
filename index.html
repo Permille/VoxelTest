@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Voxel test</title>
+        <link rel="stylesheet" href="IncludeEscape.css" />
+        <script src="Main.mjs" type="module"></script>
+    </head>
+    <body>
+        <svg style="height: 0; width: 0;padding: 0; margin: 0; position: absolute;">
+            <filter id="filter" x="-20%" y="-20%" width="140%" height="140%" filterUnits="objectBoundingBox" primitiveUnits="userSpaceOnUse" color-interpolation-filters="linearRGB">
+                <feDisplacementMap in="SourceGraphic" in2="SourceGraphic" scale="20" xChannelSelector="R" yChannelSelector="G" x="0%" y="0%" width="100%" height="100%" result="displacementMap"/>
+            </filter>
+            <filter id="test" x="-20%" y="-20%" width="100%" height="100%" filterUnits="objectBoundingBox" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+                <feComponentTransfer x="0%" y="0%" width="100%" height="100%" in="SourceGraphic" result="ComponentTransfer">
+                    <feFuncR type="discrete" tableValues="1"/>
+                    <feFuncG type="discrete" tableValues="1"/>
+                    <feFuncB type="discrete" tableValues="1"/>
+                    <feFuncA type="discrete" tableValues="0 0 0 0 0 0 0 0 0 0 1"/>
+                </feComponentTransfer>
+                <feOffset dx="0" dy="128" x="0%" y="0%" width="100%" height="100%" in="ComponentTransfer" result="Offset"/>
+            </filter>
+            <filter id="test2" x="0%" y="0%" width="100%" height="100%" filterUnits="objectBoundingBox" primitiveUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+                <feOffset dx="0" dy="128" x="0%" y="0%" width="100%" height="100%" in="SourceGraphic" result="Offset"/>
+                <feComposite in="Offset" in2="SourceGraphic" operator="xor" x="0%" y="0%" width="100%" height="100%" result="Composite1"/>
+                <feComposite in="Composite1" in2="SourceGraphic" operator="in" x="0%" y="0%" width="100%" height="100%" result="Composite2"/>
+            </filter>
+        </svg>
+    </body>
+</html>
