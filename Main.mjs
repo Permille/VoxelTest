@@ -1,6 +1,7 @@
 import "./GLMath.mjs";
-import GetHeight from "./GetHeight.mjs";
-import * as I from "./Indices.mjs";
+//import GetHeight from "./GetHeight.mjs";
+import * as M from "./Constants/Memory.mjs";
+import * as W from "./Constants/Worker.mjs";
 
 const Canvas = document.createElement("canvas");
 const gl = Canvas.getContext("webgl2", {
@@ -518,60 +519,7 @@ function GaussianKernel(Radius, Sigma){
   return Kernel;
 }
 
-function SetAdd(SegmentArray, HeapIndex, Value){
-  let Hash = Value;/*Math.imul(((Value >>> 16) ^ Value), 0x45d9f3b);
-  Hash = Math.imul(((Hash >>> 16) ^ Hash), 0x45d9f3b);
-  Hash = ((Hash >>> 16) ^ Hash) & 8191;*/
-  for(let i = 0; i < 8192; ++i){
-    const CurrentValue = SegmentArray[HeapIndex + 2 + (((Hash + i) & 8191) << 1)];
-    if(CurrentValue === Value) return; //Set already contains element
-    if(CurrentValue === 0xffffffff){
-      Hash = (Hash + i) & 8191;
-      SegmentArray[HeapIndex + 2 + (Hash << 1)] = Value;
-      SegmentArray[HeapIndex + 2 + (Hash << 1 | 1)] = SegmentArray[HeapIndex + 1]; //This sets the ID of the entry for easy access
-      SegmentArray[HeapIndex + 16386 + SegmentArray[HeapIndex + 1]++] = Value;
-      return;
-    }
-  }
-  //throw new Error("Ran out of space"); //This should never happen because I'll add at most 4096 items. The capacity is 8192 so that it's not slow when there's many types (over 2000), which should be pretty rare anyway.
-}
-function SetClear(SegmentArray, HeapIndex){
-  const SetItems = SegmentArray[HeapIndex + 1];
-  for(let i = 0; i < SetItems; ++i){
-    const Value = SegmentArray[HeapIndex + 16386 + i];
-    let Hash = Value;/*Math.imul(((Value >>> 16) ^ Value), 0x45d9f3b);
-    Hash = Math.imul(((Hash >>> 16) ^ Hash), 0x45d9f3b);
-    Hash = ((Hash >>> 16) ^ Hash) >>> 0;*/
 
-    SegmentArray[HeapIndex + 16386 + i] = 0xffffffff;
-    for(let i = 0; i < 8192; ++i){
-      if(SegmentArray[HeapIndex + 2 + (((Hash + i) & 8191) << 1)] === 0xffffffff) break;
-      SegmentArray[HeapIndex + 2 + (((Hash + i) & 8191) << 1)] = 0xffffffff;
-      SegmentArray[HeapIndex + 2 + (((Hash + i) & 8191) << 1 | 1)] = 0xffffffff;
-    }
-  }
-  SegmentArray[HeapIndex + 1] = 0; //Set item count to 0
-}
-function SetGet(SegmentArray, HeapIndex, Value){
-  const SetSize = SegmentArray[HeapIndex + 1];
-  //Should be faster in this case because it takes a little to calculate the hash
-  if(SetSize < 4){
-    for(let i = 0; i < SetSize; ++i) if(SegmentArray[HeapIndex + 16386 + i] === Value) return i;
-    return 0xffffffff;
-  }
-  let Hash = Value;/*Math.imul(((Value >>> 16) ^ Value), 0x45d9f3b);
-  Hash = Math.imul(((Hash >>> 16) ^ Hash), 0x45d9f3b);
-  Hash = ((Hash >>> 16) ^ Hash) >>> 0;*/
-  for(let i = 0; i < 8192; ++i){
-    const CurrentValue = SegmentArray[HeapIndex + 2 + (((Hash + i) & 8191) << 1)];
-    if(CurrentValue === Value) return SegmentArray[HeapIndex + 2 + (((Hash + i) & 8191) << 1 | 1)];
-    if(CurrentValue === 0xffffffff) return 0xffffffff;
-  }
-  return 0xffffffff;
-}
-function SetSize(SegmentArray, HeapIndex){
-  return SegmentArray[HeapIndex + 1];
-}
 
 const ChunkSphereRadius = Math.sqrt(3. * (128. / 2.) ** 2.);
 
@@ -590,7 +538,7 @@ class Main{
     this.PositionZ = -3.;
 
     this.CanvasScale = 1.;
-//
+
     this.PositionX = this.PositionZ = -300., this.PositionY = 2400., this.RotationX = 2.356, this.RotationY = -.5;
     //this.PositionX = this.PositionZ = 2348., this.PositionY = 2400., this.RotationX = Math.PI + 2.356, this.RotationY = -.5;
     this.MovementSpeed = 1.025;//1.25;
@@ -641,6 +589,23 @@ class Main{
     gl.bufferData(gl.ARRAY_BUFFER, new Uint32Array(1), gl.STATIC_DRAW);
 
 
+    this.Worker = new Worker("./Worker.mjs", {"name": "Worker1", "type": "module"});
+    this.Worker.onmessage = function(Event){
+      console.log(Event);
+    };
+    this.Worker.onerror = function(Event){
+      console.log(Event);
+    };
+    this.Worker.onmessageerror = function(Event){
+      console.log(Event);
+    };
+    this.Worker.postMessage({
+      "Request": W.INITIALISE,
+      "MemoryBuffer": this.MemoryBuffer,
+      "ID": 1
+    });
+
+
     const HeightDataArraysCount = 64;
 
 
@@ -648,28 +613,31 @@ class Main{
 
 
 
-    this.Data[I.I_MEMORY_SIZE] = this.MemorySize; //In bytes
+    this.Data[M.I_MEMORY_SIZE] = this.MemorySize; //In bytes
 
     ByteIndex = 16 * 4;
 
-    this.Data[I.I_HEIGHT_DATA_INFO_INDEX] = ByteIndex >> 2;
+    this.Data[M.I_HEIGHT_DATA_INFO_INDEX] = ByteIndex >> 2;
 
     //Nothing to do, memory is already initialised to zeros
     ByteIndex += HeightDataArraysCount * 2 * 4;
-
-    let ByteIndexAtHeaderSection = ByteIndex; //This will be used to add allocation segments info when they are generated
-
 
 
     ByteIndex = (ByteIndex + 262143) & ~262143; //Round up to next 262144 alignment
 
 
     this.WorldGrid = new Uint32Array(this.MemoryBuffer, ByteIndex, 32*32*32*16); //Allocates 2MB
-    this.Data[I.I_WORLD_GRID_INDEX] = ByteIndex >> 2;
+    this.Data[M.I_WORLD_GRID_INDEX] = ByteIndex >> 2;
     ByteIndex += 32*32*32*16*4;
+
+    this.WorldGridInfo = new Uint32Array(this.MemoryBuffer, ByteIndex, 8*32*32*16); //Allocates 512 KB
+    this.Data[M.I_WORLD_GRID_INFO_INDEX] = ByteIndex >> 2;
+    ByteIndex += 8*32*32*16*4;
+
+
     this.HeightDataArrays = [];
-    this.Data[I.I_HEIGHT_DATA_INDEX] = ByteIndex >> 2;
-    this.Data[I.I_HEIGHT_DATA_COUNT] = HeightDataArraysCount;
+    this.Data[M.I_HEIGHT_DATA_INDEX] = ByteIndex >> 2;
+    this.Data[M.I_HEIGHT_DATA_COUNT] = HeightDataArraysCount;
 
     for(let i = 0; i < HeightDataArraysCount; ++i){ //Allocates 4MB in total, HeightDataArraysCount == 64
       this.HeightDataArrays.push(new Float32Array(this.MemoryBuffer, ByteIndex, 128*128));
@@ -686,640 +654,18 @@ class Main{
     for(; ByteIndex < this.MemorySize; ByteIndex += 65536 * 4 /* => 65536 u32s */){
       const MemorySegment_i32 = new Int32Array(this.MemoryBuffer, ByteIndex, 65536);
       const MemorySegment_u32 = new Uint32Array(this.MemoryBuffer, ByteIndex, 65536);
-      MemorySegment_u32[I.I_STACK] = 65527;
-      MemorySegment_u32[I.I_LIST_END] = 65527;
+      MemorySegment_u32[M.I_STACK] = 65527;
+      MemorySegment_u32[M.I_LIST_END] = 65527;
       this.MemorySegments_u32.push(MemorySegment_u32);
       this.MemorySegments_i32.push(MemorySegment_i32);
 
-      this.Data[ByteIndexAtHeaderSection >> 2] = ByteIndex;
-      ByteIndexAtHeaderSection += 4;
-
-      this.Data[I.I_ALLOCATION_SEGMENTS_COUNT]++;
+      this.Data[M.I_ALLOCATION_SEGMENTS_COUNT]++;
     }
 
-    this.Data[I.I_ALLOCATION_SEGMENTS_LIST_INDEX] = (this.Data[I.I_MEMORY_SIZE] >> 18) - this.Data[I.I_ALLOCATION_SEGMENTS_COUNT];
+    this.Data[M.I_ALLOCATION_SEGMENTS_LIST_INDEX] = (this.Data[M.I_MEMORY_SIZE] >> 18) - this.Data[M.I_ALLOCATION_SEGMENTS_COUNT];
 
 
 
-
-    //897/1498
-    //820/1296
-
-    const Heights = new Float32Array(256 * 256);
-    for(let z = 0; z < 256; ++z) for(let x = 0; x < 256; ++x){
-      Heights[z << 8 | x] = GetHeight(x * 16, z * 16);
-    }
-    const InterpolatedHeights = new Float32Array(18 * 18);
-    const Min4s = new Float32Array(16);
-    const Max4s = new Float32Array(16);
-
-    const Children128SegmentAndStackIndex = this.AllocateMemory(514, true);
-    const Children128SegmentIndex = Children128SegmentAndStackIndex >> 16;
-    const Children128StackIndex = Children128SegmentAndStackIndex & 65535;
-    const Children128SegmentArray = this.MemorySegments_u32[Children128SegmentIndex];
-
-    const AllocationTemplateSegmentAndStackIndex = this.AllocateMemory(8192, true);
-    const AllocationTemplateSegmentIndex = AllocationTemplateSegmentAndStackIndex >> 16;
-    const AllocationTemplateStackIndex = AllocationTemplateSegmentAndStackIndex & 65535;
-    const AllocationTemplateSegmentArray = this.MemorySegments_u32[AllocationTemplateSegmentIndex];
-
-    let FreeCubeIndex = 0;
-
-    const FreeCubeIndicesSegmentAndStackIndex = this.AllocateMemory(514, true);
-    const FreeCubeIndicesSegmentIndex = FreeCubeIndicesSegmentAndStackIndex >> 16;
-    const FreeCubeIndicesStackIndex = FreeCubeIndicesSegmentAndStackIndex & 65535;
-    const FreeCubeIndicesSegmentArray = this.MemorySegments_u32[FreeCubeIndicesSegmentIndex];
-
-    {
-      const FreeCubeSegmentHeapIndex = FreeCubeIndicesSegmentArray[FreeCubeIndicesStackIndex];
-      for(let i = 2; i < 514; ++i){
-        FreeCubeIndicesSegmentArray[FreeCubeSegmentHeapIndex + i] = 0;
-      }
-    }
-
-    const TypesSetSegmentAndStackIndex = this.AllocateMemory(20482, true);
-    const TypesSetSegmentIndex = TypesSetSegmentAndStackIndex >> 16;
-    const TypesSetStackIndex = TypesSetSegmentAndStackIndex & 65535;
-    const TypesSetSegmentArray = this.MemorySegments_u32[TypesSetSegmentIndex];
-
-    {
-      const TypesSetHeapIndex = TypesSetSegmentArray[TypesSetStackIndex];
-      TypesSetSegmentArray[TypesSetHeapIndex + 1] = 0;
-      for(let i = 2; i < 20482; ++i){
-        TypesSetSegmentArray[TypesSetHeapIndex + i] = 0xffffffff;
-      }
-    }
-
-    const TempRLESegmentAndStackIndex = this.AllocateMemory(8210, true);
-    const TempRLESegmentIndex = TempRLESegmentAndStackIndex >> 16;
-    const TempRLEStackIndex = TempRLESegmentAndStackIndex & 65535;
-    const TempRLESegmentArray = this.MemorySegments_u32[TempRLESegmentIndex];
-
-
-
-
-    for(let z128 = 0; z128 < 16; ++z128) for(let x128 = 0; x128 < 16; ++x128){
-      //Find bounds for y values in 128² region
-      let MinY = 32767;
-      let MaxY = -32768;
-      for(let z = 0; z < 10; ++z) for(let x = 0; x < 10; ++x){
-        const Height = Heights[((z128 << 11) + (z << 8)) | ((x128 << 3) + x)];
-        MinY = Math.min(MinY, Height);
-        MaxY = Math.max(MaxY, Height);
-      }
-      for(let y128 = Math.floor(MinY / 128), y128_Max = Math.floor(MaxY / 128); y128 <= y128_Max; ++y128){
-        const Children128HeapIndex = Children128SegmentArray[Children128StackIndex];
-        for(let i = 2; i < 514; ++i) Children128SegmentArray[Children128HeapIndex + i] = 0;
-
-        let NonEmptyChildrenCount = 0;
-
-        for(let z16 = 0; z16 < 8; ++z16){
-          for(let x16 = 0; x16 < 8; ++x16){
-            const HeightMM = Heights[((z128 << 11) + (z16 << 8)) | ((x128 << 3) + x16)];
-            const HeightM0 = Heights[((z128 << 11) + (z16 << 8)) | ((x128 << 3) + (x16 + 1))];
-            const HeightMP = Heights[((z128 << 11) + (z16 << 8)) | ((x128 << 3) + (x16 + 2))];
-            const Height0M = Heights[((z128 << 11) + ((z16 + 1) << 8)) | ((x128 << 3) + x16)];
-            const Height00 = Heights[((z128 << 11) + ((z16 + 1) << 8)) | ((x128 << 3) + (x16 + 1))];
-            const Height0P = Heights[((z128 << 11) + ((z16 + 1) << 8)) | ((x128 << 3) + (x16 + 2))];
-            const HeightPM = Heights[((z128 << 11) + ((z16 + 2) << 8)) | ((x128 << 3) + x16)];
-            const HeightP0 = Heights[((z128 << 11) + ((z16 + 2) << 8)) | ((x128 << 3) + (x16 + 1))];
-            const HeightPP = Heights[((z128 << 11) + ((z16 + 2) << 8)) | ((x128 << 3) + (x16 + 2))];
-
-
-            for(let z = 0; z < 9; ++z) for(let x = 0; x < 9; ++x){
-              InterpolatedHeights[z * 18 + x] = (
-                HeightMM * (16. - (x + 7)) * (16. - (z + 7)) +
-                HeightM0 * (x + 7) * (16. - (z + 7)) +
-                Height0M * (16. - (x + 7)) * (z + 7) +
-                Height00 * (x + 7) * (z + 7)
-              ) / 256.;
-
-
-              InterpolatedHeights[z * 18 + (x + 9)] = (
-                HeightM0 * (16. - x) * (16. - (z + 7)) +
-                HeightMP * x * (16. - (z + 7)) +
-                Height00 * (16. - x) * (z + 7) +
-                Height0P * x * (z + 7)
-              ) / 256.;
-
-
-              InterpolatedHeights[(z + 9) * 18 + x] = (
-                Height0M * (16. - (x + 7)) * (16. - z) +
-                Height00 * (x + 7) * (16. - z) +
-                HeightPM * (16. - (x + 7)) * z +
-                HeightP0 * (x + 7) * z
-              ) / 256.;
-
-
-              InterpolatedHeights[(z + 9) * 18 + (x + 9)] = (
-                Height00 * (16. - x) * (16. - z) +
-                Height0P * x * (16. - z) +
-                HeightP0 * (16. - x) * z +
-                HeightPP * x * z
-              ) / 256.;
-            }
-
-
-            let YMin = 2147483647;
-            let YMax = -2147483648;
-
-            Min4s.fill(2147483647);
-            Max4s.fill(-2147483648);
-
-            for(let z4 = 0; z4 < 4; ++z4) for(let x4 = 0; x4 < 4; ++x4){
-              const Offset = (z4 * 4) * 18 + (x4 * 4);
-              let Min = 2147483647;
-              let Max = -2147483648;
-              for(let z1 = 0; z1 < 6; ++z1) for(let x1 = 0; x1 < 6; x1 += 2){
-                let Large = InterpolatedHeights[Offset + z1 * 18 + x1];
-                let Small = InterpolatedHeights[Offset + z1 * 18 + x1 + 1];
-                if(Large < Small){
-                  const Temp = Large;
-                  Large = Small;
-                  Small = Temp;
-                }
-                Min = Math.min(Small, Min);
-                Max = Math.max(Large, Max);
-              }
-              YMin = Math.min(YMin, Min);
-              YMax = Math.max(YMax, Max);
-
-              Min4s[z4 << 2 | x4] = Math.floor(Min);
-              Max4s[z4 << 2 | x4] = Math.floor(Max);
-            }
-
-
-            const y16_Min = Math.max(Math.floor((YMin - (y128 << 7)) / 16), 0);
-            const y16_Max = Math.min(Math.floor((YMax - (y128 << 7)) / 16), 7);
-
-            for(let y16 = y16_Min; y16 <= y16_Max; ++y16){
-              const FreeCubeIndicesHeapIndex = FreeCubeIndicesSegmentArray[FreeCubeIndicesStackIndex];
-              let CubeSegmentAndStackIndex = FreeCubeIndicesSegmentArray[FreeCubeIndicesHeapIndex + 2 + FreeCubeIndex];
-              if(CubeSegmentAndStackIndex === 0){
-                CubeSegmentAndStackIndex = this.AllocateMemory(4130, true);
-                FreeCubeIndicesSegmentArray[FreeCubeIndicesHeapIndex + 2 + FreeCubeIndex] = CubeSegmentAndStackIndex;
-              }
-              FreeCubeIndex++;
-              const CubeSegmentIndex = CubeSegmentAndStackIndex >> 16;
-              const CubeStackIndex = CubeSegmentAndStackIndex & 65535;
-              const CubeSegmentArray = this.MemorySegments_u32[CubeSegmentIndex];
-              const CubeHeapIndex = CubeSegmentArray[CubeStackIndex];
-
-              for(let i = 0; i < 16; ++i){
-                CubeSegmentArray[CubeHeapIndex + 4098 + i] = Min4s[i];
-                CubeSegmentArray[CubeHeapIndex + 4114 + i] = Max4s[i];
-              }
-
-              //The start of the memory allocation, plus two for the header, plus the specific region
-              Children128SegmentArray[Children128HeapIndex + 2 + (z16 << 6 | y16 << 3 | x16)] = CubeSegmentAndStackIndex;
-              NonEmptyChildrenCount++;
-
-              for(let z1 = 0; z1 < 16; ++z1) for(let y1 = 0; y1 < 16; ++y1) for(let x1 = 0; x1 < 16; ++x1){
-                let HeightDifference = InterpolatedHeights[(z1 + 1) * 18 + (x1 + 1)] - (y128 << 7 | y16 << 4 | y1);
-                let Type;
-                if(HeightDifference < 0) Type = 0;
-                else if(HeightDifference < 1) Type = 2;
-                else if(HeightDifference < 2) Type = 1;
-                else Type = 3;
-                CubeSegmentArray[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | x1)] = Type; //This gets the type
-              }
-            }
-          }
-        } //End z16
-
-        //Test structure spawn
-        if(false){
-          const FreeCubeIndicesHeapIndex = FreeCubeIndicesSegmentArray[FreeCubeIndicesStackIndex];
-          if(true || x128 === 3 && z128 === 3){
-            for(let z16 = 0; z16 < 8; ++z16) for(let y16 = 0; y16 < 8; ++y16) for(let x16 = 0; x16 < 8; ++x16){
-              let CubeSegmentAndStackIndex = 0;
-              let CubeSegmentArray;
-              let CubeHeapIndex;
-              for(let z1 = 0; z1 < 16; ++z1) for(let y1 = 0; y1 < 16; ++y1) for(let x1 = 0; x1 < 16; ++x1){
-                const Distance = Math.abs((z16 << 4 | z1) - 64) + Math.abs((y16 << 4 | y1) - 64) + Math.abs((x16 << 4 | x1) - 64);
-                if(Distance < ((x16 << 4 | x1) ^ (y16 << 4 | y1) ^ (z16 << 4 | z1))){
-                  if(CubeSegmentAndStackIndex === 0){
-                    CubeSegmentAndStackIndex = Children128SegmentArray[Children128HeapIndex + 2 + (z16 << 6 | y16 << 3 | x16)];
-                    if(CubeSegmentAndStackIndex === 0){
-                      CubeSegmentAndStackIndex = FreeCubeIndicesSegmentArray[FreeCubeIndicesHeapIndex + 2 + FreeCubeIndex];
-                      if(CubeSegmentAndStackIndex === 0){
-                        CubeSegmentAndStackIndex = this.AllocateMemory(4130, true);
-                        FreeCubeIndicesSegmentArray[FreeCubeIndicesHeapIndex + 2 + FreeCubeIndex] = CubeSegmentAndStackIndex;
-                      }
-                      Children128SegmentArray[Children128HeapIndex + 2 + (z16 << 6 | y16 << 3 | x16)] = CubeSegmentAndStackIndex;
-                      NonEmptyChildrenCount++;
-                      FreeCubeIndex++;
-
-
-                      const CubeSegmentIndex = CubeSegmentAndStackIndex >> 16;
-                      const CubeStackIndex = CubeSegmentAndStackIndex & 65535;
-                      CubeSegmentArray = this.MemorySegments_u32[CubeSegmentIndex];
-                      CubeHeapIndex = CubeSegmentArray[CubeStackIndex];
-                      for(let i = 0; i < 4096; ++i) CubeSegmentArray[CubeHeapIndex + 2 + i] = 0;
-                    }
-                    const CubeSegmentIndex = CubeSegmentAndStackIndex >> 16;
-                    const CubeStackIndex = CubeSegmentAndStackIndex & 65535;
-                    CubeSegmentArray = this.MemorySegments_u32[CubeSegmentIndex];
-                    CubeHeapIndex = CubeSegmentArray[CubeStackIndex];
-                    for(let i = 0; i < 16; ++i){
-                      CubeSegmentArray[CubeHeapIndex + 4098 + i] = 0;
-                      CubeSegmentArray[CubeHeapIndex + 4114 + i] = 15;
-                    }
-
-                  }
-                  CubeSegmentArray[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | x1)] = 3;
-
-                }
-              }
-            }
-          }
-        }
-
-        const Allocation128SegmentAndStackIndex = this.AllocateMemory(531 + NonEmptyChildrenCount, false);
-        const Allocation128SegmentIndex = Allocation128SegmentAndStackIndex >> 16;
-        const Allocation128StackIndex = Allocation128SegmentAndStackIndex & 65535;
-        const Allocation128SegmentArray = this.MemorySegments_u32[Allocation128SegmentIndex];
-        const Allocation128HeapIndex = Allocation128SegmentArray[Allocation128StackIndex];
-        for(let i = 2; i < 530; ++i) Allocation128SegmentArray[Allocation128HeapIndex + i] = 0;
-
-        Allocation128SegmentArray[Allocation128HeapIndex + 530] = NonEmptyChildrenCount;
-        for(let i = 0, Counter = Allocation128HeapIndex + 531; i < 512; ++i){
-          if(Children128SegmentArray[Children128HeapIndex + 2 + i] !== 0){
-            Allocation128SegmentArray[Counter++] = i; //Store the local coordinate (8x8x8) of every 16-cube that's not empty
-          }
-        }
-
-        for(let z16 = 0; z16 < 8; ++z16) for(let y16 = 0; y16 < 8; ++y16) for(let x16 = 0; x16 < 8; ++x16){
-          const CubeSegmentAndStackIndex = Children128SegmentArray[Children128HeapIndex + 2 + (z16 << 6 | y16 << 3 | x16)];
-          if(CubeSegmentAndStackIndex === 0) continue; //Is either hidden below ground or empty
-
-          const AllocationTemplateHeapIndex = AllocationTemplateSegmentArray[AllocationTemplateStackIndex];
-          for(let i = 1; i < 8; ++i) AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + i] = 0;
-
-          const CubeSegmentIndex = CubeSegmentAndStackIndex >> 16;
-          const CubeStackIndex = CubeSegmentAndStackIndex & 65535;
-          const CubeSegmentArray = this.MemorySegments_u32[CubeSegmentIndex];
-          const CubeHeapIndex = CubeSegmentArray[CubeStackIndex];
-          const CubeHeapArrayView = new Uint32Array(this.MemoryBuffer, (((CubeSegmentIndex << 16 | CubeHeapIndex) + 2) * 4) >>> 0, (CubeSegmentArray[CubeHeapIndex] >> 16) - 2);
-
-          let MinX16 = 15;
-          let MinY16 = 15;
-          let MinZ16 = 15;
-          let MaxX16 = 0;
-          let MaxY16 = 0;
-          let MaxZ16 = 0;
-
-          Outer: for(let x = 0; x <= 15; ++x) for(let z = 0; z <= 15; ++z) for(let y = 0; y <= 15; ++y) if(CubeHeapArrayView[z << 8 | y << 4 | x] !== 0){
-            MinX16 = x;
-            break Outer;
-          }
-          Outer: for(let y = 0; y <= 15; ++y) for(let z = 0; z <= 15; ++z) for(let x = MinX16; x <= 15; ++x) if(CubeHeapArrayView[z << 8 | y << 4 | x] !== 0){
-            MinY16 = y;
-            break Outer;
-          }
-          Outer: for(let z = 0; z <= 15; ++z) for(let y = MinY16; y <= 15; ++y) for(let x = MinX16; x <= 15; ++x) if(CubeHeapArrayView[z << 8 | y << 4 | x] !== 0){
-            MinZ16 = z;
-            break Outer;
-          }
-
-          Outer: for(let x = 15; x >= MinX16; --x) for(let z = MinZ16; z <= 15; ++z) for(let y = MinY16; y <= 15; ++y) if(CubeHeapArrayView[z << 8 | y << 4 | x] !== 0){
-            MaxX16 = x;
-            break Outer;
-          }
-          Outer: for(let y = 15; y >= MinY16; --y) for(let z = MinZ16; z <= 15; ++z) for(let x = MinX16; x <= MaxX16; ++x) if(CubeHeapArrayView[z << 8 | y << 4 | x] !== 0){
-            MaxY16 = y;
-            break Outer;
-          }
-          Outer: for(let z = 15; z >= MinZ16; --z) for(let y = MinY16; y <= MaxY16; ++y) for(let x = MinX16; x <= MaxX16; ++x) if(CubeHeapArrayView[z << 8 | y << 4 | x] !== 0){
-            MaxZ16 = z;
-            break Outer;
-          }
-
-          let MinYTerrain = 2147483647;
-          for(let i = 0; i < 16; ++i){
-            MinYTerrain = Math.min(CubeSegmentArray[CubeHeapIndex + 4098 + i], MinYTerrain);
-          }
-          MinY16 = Math.min(Math.max(MinY16, MinYTerrain - (y128 << 7 | y16 << 4)), 15);
-
-          let L0Allocations = 0;
-          let L1Allocations = 0;
-          let L2Allocations = 0;
-          let TotalAllocations = 0;
-          let L0Bitmap16 = 0;
-          let L1Bitmap16 = 0;
-          let L2Bitmap16 = 0;
-          let L3Bitmap16 = 0;
-
-          for(let y4 = MinY16 >> 1; y4 <= (MaxY16 >> 1); ++y4) for(let z4 = MinZ16 >> 2; z4 <= (MaxZ16 >> 2); ++z4) for(let x4 = MinX16 >> 2; x4 <= (MaxX16 >> 2); ++x4){
-            /*let Bitmap4 = 0;
-            for(let y1 = 0; y1 < 2; ++y1) for(let z1 = 0; z1 < 4; ++z1) for(let x1 = 0; x1 < 4; ++x1){
-              if(CubeHeapArrayView[z4 << 10 | z1 << 8 | y4 << 5 | y1 << 4 | x4 << 2 | x1] !== 0) Bitmap4 |= 1 << (y1 << 4 | z1 << 2 | x1);
-            }*/
-            const Offset = z4 << 10 | y4 << 5 | x4 << 2;
-            const Bitmap4 = (CubeHeapArrayView[Offset | 0x000] && 1)
-              | (CubeHeapArrayView[Offset | 0x001] && 2)
-              | (CubeHeapArrayView[Offset | 0x002] && 4)
-              | (CubeHeapArrayView[Offset | 0x003] && 8)
-              | (CubeHeapArrayView[Offset | 0x100] && 16)
-              | (CubeHeapArrayView[Offset | 0x101] && 32)
-              | (CubeHeapArrayView[Offset | 0x102] && 64)
-              | (CubeHeapArrayView[Offset | 0x103] && 128)
-              | (CubeHeapArrayView[Offset | 0x200] && 256)
-              | (CubeHeapArrayView[Offset | 0x201] && 512)
-              | (CubeHeapArrayView[Offset | 0x202] && 1024)
-              | (CubeHeapArrayView[Offset | 0x203] && 2048)
-              | (CubeHeapArrayView[Offset | 0x300] && 4096)
-              | (CubeHeapArrayView[Offset | 0x301] && 8192)
-              | (CubeHeapArrayView[Offset | 0x302] && 16384)
-              | (CubeHeapArrayView[Offset | 0x303] && 32768)
-              | (CubeHeapArrayView[Offset | 0x010] && 65536)
-              | (CubeHeapArrayView[Offset | 0x011] && 131072)
-              | (CubeHeapArrayView[Offset | 0x012] && 262144)
-              | (CubeHeapArrayView[Offset | 0x013] && 524288)
-              | (CubeHeapArrayView[Offset | 0x110] && 1048576)
-              | (CubeHeapArrayView[Offset | 0x111] && 2097152)
-              | (CubeHeapArrayView[Offset | 0x112] && 4194304)
-              | (CubeHeapArrayView[Offset | 0x113] && 8388608)
-              | (CubeHeapArrayView[Offset | 0x210] && 16777216)
-              | (CubeHeapArrayView[Offset | 0x211] && 33554432)
-              | (CubeHeapArrayView[Offset | 0x212] && 67108864)
-              | (CubeHeapArrayView[Offset | 0x213] && 134217728)
-              | (CubeHeapArrayView[Offset | 0x310] && 268435456)
-              | (CubeHeapArrayView[Offset | 0x311] && 536870912)
-              | (CubeHeapArrayView[Offset | 0x312] && 1073741824)
-              | (CubeHeapArrayView[Offset | 0x313] && 2147483648);
-
-            if(Bitmap4 !== 0){
-              AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 8 + TotalAllocations] = Bitmap4;
-              TotalAllocations++;
-              if(y4 < 2)      L0Bitmap16 |= 1 << (y4 << 4 | z4 << 2 | x4), L0Allocations++;
-              else if(y4 < 4) L1Bitmap16 |= 1 << ((y4 & 1) << 4 | z4 << 2 | x4), L1Allocations++;
-              else if(y4 < 6) L2Bitmap16 |= 1 << ((y4 & 1) << 4 | z4 << 2 | x4), L2Allocations++;
-              else            L3Bitmap16 |= 1 << ((y4 & 1) << 4 | z4 << 2 | x4);
-            }
-          }
-
-          if(MinX16 > MaxX16 || MinY16 > MaxY16 || MinZ16 > MaxZ16){
-            MaxX16 = 0;
-            MaxY16 = 0;
-            MaxZ16 = 0;
-            MinX16 = 0;
-            MinY16 = 0;
-            MinZ16 = 0;
-          }
-
-          AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 1] = TotalAllocations + 8; //Start of RLE
-          AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 2] = MaxZ16 << 20 | MaxY16 << 16 | MaxX16 << 12 | MinZ16 << 8 | MinY16 << 4 | MinX16;
-          AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 3] = L0Allocations << 23 | (L0Allocations + L1Allocations) << 16 | (L0Allocations + L1Allocations + L2Allocations) << 9 | z16 << 6 | y16 << 3 | x16;
-          AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 4] = L0Bitmap16;
-          AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 5] = L1Bitmap16;
-          AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 6] = L2Bitmap16;
-          AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 7] = L3Bitmap16;
-
-
-          const Cube000HeapArrayView = CubeHeapArrayView;
-
-
-          const TempRLEHeapIndex = TempRLESegmentArray[TempRLEStackIndex];
-          const TempRLEHeapArrayView = new Uint32Array(this.MemoryBuffer, (((TempRLESegmentIndex << 16 | TempRLEHeapIndex) + 2) * 4) >>> 0, (TempRLESegmentArray[TempRLEHeapIndex] >> 16) - 2);
-
-          const TypesSetHeapIndex = TypesSetSegmentArray[TypesSetStackIndex];
-          SetClear(TypesSetSegmentArray, TypesSetHeapIndex);
-
-          for(let i = 0; i < 256; ++i) TempRLEHeapArrayView[8192 + i] = 0; //TODO: Maybe I don't need this?
-
-          // RLE_0: 4509003, 917 fps, 2171 ms
-          // RLE_1: 4505755, 912 fps, 2440 ms
-          // RLE_2: 4325327, 929 fps, 2385 ms
-          // RLE_3: 4105167, 936 fps, 2581 ms (didn't work correctly)
-          // RLE_4: 6676175, 956 fps, 2393 ms
-          // RLE_5: 4276946, 932 fps, 2305 ms
-          // RLE_6: 4276946, 932 fps, 2069 ms
-          // RLE_7: 4413594, 917 fps, 2492 ms (three types)
-          for(let y1 = MinY16; y1 <= MaxY16; ++y1){
-            let CurrentType = Cube000HeapArrayView[y1 << 4]; //Get voxel at 0, y1, 0
-            let RunEnd = 0;
-            let LayerItems = 0;
-            for(let z1 = 0; z1 < 16; ++z1) for(let x1 = 0; x1 < 16; ++x1){
-              const Type = Cube000HeapArrayView[z1 << 8 | y1 << 4 | x1];
-              if(Type !== 0 && (
-                x1 === 0 || x1 === 15 || y1 === 0 || y1 === 15 || z1 === 0 || z1 === 15 ||
-                Cube000HeapArrayView[z1 << 8 | y1 << 4 | (x1 - 1)] === 0 ||
-                Cube000HeapArrayView[z1 << 8 | y1 << 4 | (x1 + 1)] === 0 ||
-                Cube000HeapArrayView[z1 << 8 | (y1 - 1) << 4 | x1] === 0 ||
-                Cube000HeapArrayView[z1 << 8 | (y1 + 1) << 4 | x1] === 0 ||
-                Cube000HeapArrayView[(z1 - 1) << 8 | y1 << 4 | x1] === 0 ||
-                Cube000HeapArrayView[(z1 + 1) << 8 | y1 << 4 | x1] === 0
-              )){
-                if(CurrentType === 0) CurrentType = Type;
-                if((LayerItems === 0 || CurrentType !== Type)) SetAdd(TypesSetSegmentArray, TypesSetHeapIndex, Type);
-                if(CurrentType !== Type){
-                  TempRLEHeapArrayView[y1 << 9 | LayerItems << 1 | 0] = CurrentType;
-                  TempRLEHeapArrayView[y1 << 9 | LayerItems << 1 | 1] = RunEnd - 1; //-1 is so that it's in the range [0, 255] instead of [1, 256]
-                  LayerItems++;
-                  CurrentType = Type;
-                }
-              }
-              RunEnd++;
-            }
-            if(CurrentType !== 0){
-              TempRLEHeapArrayView[y1 << 9 | LayerItems << 1 | 0] = CurrentType;
-              TempRLEHeapArrayView[y1 << 9 | LayerItems << 1 | 1] = RunEnd - 1; //-1 is so that it's in the range [0, 255] instead of [1, 256]
-              LayerItems++;
-            }
-            TempRLEHeapArrayView[8192 | y1] = LayerItems; //Will be 0 if this column was just air
-          }
-
-          if(SetSize(TypesSetSegmentArray, TypesSetHeapIndex) === 0) continue; //TODO: Maybe this is bad?
-
-
-          const TypeCount = SetSize(TypesSetSegmentArray, TypesSetHeapIndex);
-          const RLEOffset = AllocationTemplateHeapIndex + TotalAllocations + 8;
-
-          let CurrentIndex = 0;
-          AllocationTemplateSegmentArray[RLEOffset + CurrentIndex++] = TypeCount;
-
-          if(TypeCount === 1){
-            AllocationTemplateSegmentArray[RLEOffset + CurrentIndex++] = TypesSetSegmentArray[TypesSetHeapIndex + 16386];
-          } else if(TypeCount >= 2){
-            //Before this will be the offsets
-            CurrentIndex += 6;
-            const TypesMapIntOffset = CurrentIndex;
-            //This writes all the different types
-            for(let i = 0; i < TypeCount; ++i){
-              AllocationTemplateSegmentArray[RLEOffset + CurrentIndex++] = TypesSetSegmentArray[TypesSetHeapIndex + 16386 + i];
-            }
-
-            let LocalOffset = 0;
-            AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] = 0;
-
-            if(TypeCount === 2){
-              for(let y1 = 0; y1 < 16; ++y1){
-                const Length = TempRLEHeapArrayView[8192 + y1];
-                AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 8176 + y1] = LocalOffset;
-                if(Length === 0) continue; //Has no RLE data or is completely empty
-
-                for(let i = 0; i < Length; ++i, ++LocalOffset){
-                  AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] |= SetGet(TypesSetSegmentArray, TypesSetHeapIndex, TempRLEHeapArrayView[y1 << 9 | i << 1]) << (LocalOffset & 31);
-                  if((LocalOffset & 31) === 31){
-                    CurrentIndex++;
-                    AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] = 0;
-                  }
-                }
-              }
-              if((LocalOffset & 31) === 0) CurrentIndex--;
-            } else if(TypeCount <= 4){
-              for(let y1 = 0; y1 < 16; ++y1){
-                const Length = TempRLEHeapArrayView[8192 + y1];
-                AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 8176 + y1] = LocalOffset;
-                if(Length === 0) continue; //Has no RLE data or is completely empty
-
-                for(let i = 0; i < Length; ++i, ++LocalOffset){
-                  AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] |= SetGet(TypesSetSegmentArray, TypesSetHeapIndex, TempRLEHeapArrayView[y1 << 9 | i << 1]) << ((LocalOffset & 15) << 1);
-                  if((LocalOffset & 15) === 15){
-                    CurrentIndex++;
-                    AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] = 0;
-                  }
-                }
-              }
-              if((LocalOffset & 15) === 0) CurrentIndex--;
-            } else if(TypeCount <= 16){
-              for(let y1 = 0; y1 < 16; ++y1){
-                const Length = TempRLEHeapArrayView[8192 + y1];
-                AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 8176 + y1] = LocalOffset;
-                if(Length === 0) continue; //Has no RLE data or is completely empty
-
-                for(let i = 0; i < Length; ++i, ++LocalOffset){
-                  AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] |= SetGet(TypesSetSegmentArray, TypesSetHeapIndex, TempRLEHeapArrayView[y1 << 9 | i << 1]) << ((LocalOffset & 7) << 2);
-                  if((LocalOffset & 7) === 7){
-                    CurrentIndex++;
-                    AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] = 0;
-                  }
-                }
-              }
-              if((LocalOffset & 7) === 0) CurrentIndex--;
-            } else if(TypeCount <= 256){
-              for(let y1 = 0; y1 < 16; ++y1){
-                const Length = TempRLEHeapArrayView[8192 + y1];
-                AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 8176 + y1] = LocalOffset;
-                if(Length === 0) continue; //Has no RLE data or is completely empty
-
-                for(let i = 0; i < Length; ++i, ++LocalOffset){
-                  AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] |= SetGet(TypesSetSegmentArray, TypesSetHeapIndex, TempRLEHeapArrayView[y1 << 9 | i << 1]) << ((LocalOffset & 3) << 3);
-                  if((LocalOffset & 3) === 3){
-                    CurrentIndex++;
-                    AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] = 0;
-                  }
-                }
-              }
-              if((LocalOffset & 3) === 0) CurrentIndex--;
-            } else{
-              for(let y1 = 0; y1 < 16; ++y1){
-                const Length = TempRLEHeapArrayView[8192 + y1];
-                AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 8176 + y1] = LocalOffset;
-                if(Length === 0) continue; //Has no RLE data or is completely empty
-
-                for(let i = 0; i < Length; ++i, ++LocalOffset){
-                  AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] |= SetGet(TypesSetSegmentArray, TypesSetHeapIndex, TempRLEHeapArrayView[y1 << 9 | i << 1]) << ((LocalOffset & 1) << 4);
-                  if((LocalOffset & 1) === 1){
-                    CurrentIndex++;
-                    AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] = 0;
-                  }
-                }
-              }
-              if((LocalOffset & 1) === 0) CurrentIndex--;
-            }
-
-
-            CurrentIndex++;
-            AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] = 0;
-
-            const LengthIntOffset = CurrentIndex;
-
-            LocalOffset = 0;
-            for(let y1 = 0; y1 < 16; ++y1){
-              const Length = TempRLEHeapArrayView[8192 + y1];
-              if(
-                Length === 0 || //Has no rle data
-                (TempRLEHeapArrayView[y1 << 9] === 0 && TempRLEHeapArrayView[y1 << 9 | 1] === 255) //Is fully empty
-              ) continue;
-              for(let i = 0; i < Length; ++i, ++LocalOffset){
-                AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] |= TempRLEHeapArrayView[y1 << 9 | i << 1 | 1] << ((LocalOffset & 3) << 3);
-                if((LocalOffset & 3) === 3){
-                  CurrentIndex++;
-                  AllocationTemplateSegmentArray[RLEOffset + CurrentIndex] = 0;
-                }
-              }
-            }
-            if((LocalOffset & 3) === 0) CurrentIndex--;
-            CurrentIndex++;
-
-            AllocationTemplateSegmentArray[RLEOffset + 1] = LengthIntOffset << 16 | TypesMapIntOffset;
-            for(let i = 0; i < 5; ++i){
-              const Reference = AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 8177 + i * 3];
-              const Difference2 = AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 8178 + i * 3] - Reference;
-              const Difference3 = AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + 8179 + i * 3] - Reference;
-              AllocationTemplateSegmentArray[RLEOffset + 2 + i] = Difference3 << 21 | Difference2 << 12 | Reference;
-            }
-          }
-
-
-
-
-          //Copy memory to permanent allocation
-          const AllocationSize = TotalAllocations + CurrentIndex + 8;
-
-          const PermanentAllocationSegmentAndStackIndex = this.AllocateMemory(AllocationSize, false);
-          const PermanentAllocationSegmentIndex = PermanentAllocationSegmentAndStackIndex >> 16;
-          const PermanentAllocationStackIndex = PermanentAllocationSegmentAndStackIndex & 65535;
-          const PermanentAllocationSegmentArray = this.MemorySegments_u32[PermanentAllocationSegmentIndex];
-          const PermanentAllocationHeapIndex = PermanentAllocationSegmentArray[PermanentAllocationStackIndex];
-
-
-          for(let i = 1; i < AllocationSize; ++i){
-            PermanentAllocationSegmentArray[PermanentAllocationHeapIndex + i] = AllocationTemplateSegmentArray[AllocationTemplateHeapIndex + i];
-          }
-
-
-          this.RequestGPUUpload(PermanentAllocationSegmentIndex, PermanentAllocationStackIndex);
-          Atomics.sub(PermanentAllocationSegmentArray, I.I_USAGE_COUNTER, 1);
-
-          Allocation128SegmentArray[Allocation128HeapIndex + 2 + (z16 << 1 | y16 >> 2)] |= 1 << ((y16 << 3) & 3) | x16;
-          Allocation128SegmentArray[Allocation128HeapIndex + 2 + 16 + (z16 << 6 | y16 << 3 | x16)] = PermanentAllocationSegmentIndex << 16 | PermanentAllocationStackIndex;
-        }
-
-        this.RequestGPUUpload(Allocation128SegmentIndex, Allocation128StackIndex);
-        Atomics.sub(Allocation128SegmentArray, I.I_USAGE_COUNTER, 1);
-
-        this.Data[this.Data[I.I_WORLD_GRID_INDEX] + (0 << 15 | z128 << 10 | y128 << 5 | x128)] = Allocation128SegmentIndex << 16 | Allocation128StackIndex;
-        this.Data[I.I_UPDATED_LOD_LEVELS_MASK] |= 1 << 0;
-
-        //Deallocate all temporary uncompressed 16 cubes
-        /*for(let i = 0; i < 512; ++i){
-          const CubeSegmentAndStackIndex = Children128SegmentArray[Children128HeapIndex + 2 + i];
-          if(CubeSegmentAndStackIndex === 0) continue; //Did not allocate anything for this cube
-
-          const CubeSegmentIndex = CubeSegmentAndStackIndex >> 16;
-          const CubeStackIndex = CubeSegmentAndStackIndex & 65535;
-          const CubeSegmentArray = this.MemorySegments_u32[CubeSegmentIndex];
-
-          this.DeallocateMemory(CubeSegmentIndex, CubeStackIndex);
-          Atomics.sub(CubeSegmentArray, I.I_USAGE_COUNTER, 1);
-        }*/
-        FreeCubeIndex = 0;
-
-
-        this.DeallocateMemory(AllocationTemplateSegmentIndex, AllocationTemplateStackIndex);
-        Atomics.sub(AllocationTemplateSegmentArray, I.I_USAGE_COUNTER, 1);
-
-        this.DeallocateMemory(Children128SegmentIndex, Children128StackIndex);
-        Atomics.sub(Children128SegmentArray, I.I_USAGE_COUNTER, 1);
-      }
-      /*for(let i = 25; i < 1024; ++i){
-        //if(i === 562) debugger;
-        this.DefragmentSegment(i);
-      }*/
-    } //End z128/x128
 
     this.DataTexture = gl.createTexture();
     gl.activeTexture(gl.TEXTURE0);
@@ -1389,163 +735,7 @@ class Main{
     }.bind(this)();
   }
 
-  AllocateMemory(Size, Temporary){
-    //if(Size & 1) Size++; //Make size even. The size passed into the function should include space for the header (1x uint32, 4 bytes)
-    const Max = this.MemorySize >> 18;
 
-    let SegmentIndex = Atomics.load(this.Data, I.I_ALLOCATION_SEGMENTS_LIST_INDEX);
-    if(Temporary){
-      SegmentIndex = ((SegmentIndex + 512) % this.Data[I.I_ALLOCATION_SEGMENTS_COUNT]) + Max - this.Data[I.I_ALLOCATION_SEGMENTS_COUNT];
-    }
-    let i = 0;
-    for(; i < Max; ++i, SegmentIndex++, /* wrap around and skip to first segment location -> */ SegmentIndex >= Max && (SegmentIndex = Max - this.Data[I.I_ALLOCATION_SEGMENTS_COUNT])){
-      const SegmentArray_i32 = this.MemorySegments_i32[SegmentIndex];
-      const SegmentArray_u32 = this.MemorySegments_u32[SegmentIndex];
-      if(i === 900) debugger;
-      //Check if there's enough space
-      if(Math.min(Atomics.load(SegmentArray_u32, I.I_STACK), Atomics.load(SegmentArray_u32, I.I_LIST_END)) - Atomics.load(SegmentArray_u32, I.I_HEAP) > Size + 1){ // The +1 is for the stack item
-        //Obtain mutex lock, https://v8.dev/features/atomics
-        while(Atomics.compareExchange(SegmentArray_i32, I.I_ALLOCATION_LOCK, I.UNLOCKED, I.LOCKED) !== I.UNLOCKED){
-          Atomics.wait(SegmentArray_i32, I.I_ALLOCATION_LOCK, I.LOCKED);
-        }
-
-        //Increment usage counter
-        Atomics.add(SegmentArray_u32, I.I_USAGE_COUNTER, 1);
-
-        if(
-          Atomics.load(SegmentArray_u32, I.I_MANAGEMENT_LOCK) === I.LOCKED || //Check management lock
-          Math.min(Atomics.load(SegmentArray_u32, I.I_STACK), Atomics.load(SegmentArray_u32, I.I_LIST_END)) - Atomics.load(SegmentArray_u32, I.I_HEAP) <= Size + 1 //Check again, might have changed
-        ){
-          // Unable to allocate now, so I have to remove the lock and try another segment
-          Atomics.sub(SegmentArray_u32, I.I_USAGE_COUNTER, 1);
-          Atomics.compareExchange(SegmentArray_i32, I.I_ALLOCATION_LOCK, I.LOCKED, I.UNLOCKED);
-          Atomics.notify(SegmentArray_i32, I.I_ALLOCATION_LOCK, 1);
-          continue;
-        }
-        break; //Found segment
-      } else{
-        //Only increment if it's not skipped before (so that good segments aren't skipped only because they were locked)
-        if(SegmentIndex === Atomics.load(this.Data, I.I_ALLOCATION_SEGMENTS_LIST_INDEX) && !Temporary){
-          //Increment and wrap around if at the end of the list
-          Atomics.store(this.Data, I.I_ALLOCATION_SEGMENTS_LIST_INDEX, SegmentIndex + 1 >= Max ? Max - this.Data[I.I_ALLOCATION_SEGMENTS_COUNT] : SegmentIndex + 1);
-        }
-      }
-    }
-
-
-    if(i === Max) throw "Out of memory";
-
-
-    // I may need to switch the following section to use atomic instructions if I run into issues
-    const SegmentArray_i32 = this.MemorySegments_i32[SegmentIndex];
-    const SegmentArray_u32 = this.MemorySegments_u32[SegmentIndex];
-
-    let AllocationHeapIndex = -1;
-    let AllocationStackIndex = -1;
-    if(SegmentArray_u32[I.I_LIST_END] < SegmentArray_u32[I.I_LIST_START]){
-      SegmentArray_u32[I.I_LIST_END]++;
-      AllocationStackIndex = SegmentArray_u32[SegmentArray_u32[I.I_LIST_END]];
-      SegmentArray_u32[SegmentArray_u32[I.I_LIST_END]] = 0;
-    } else{
-      AllocationStackIndex = SegmentArray_u32[I.I_STACK];
-      SegmentArray_u32[I.I_STACK]--;
-    }
-    AllocationHeapIndex = SegmentArray_u32[I.I_HEAP];
-    SegmentArray_u32[AllocationStackIndex] = AllocationHeapIndex;
-    SegmentArray_u32[I.I_HEAP] += Size;
-
-
-    SegmentArray_u32[AllocationHeapIndex] = Size << 16 | (~AllocationStackIndex & 65535);
-
-    //Increment usage counter
-    Atomics.add(SegmentArray_u32, I.I_USAGE_COUNTER, 1);
-
-    //Free allocation lock
-    Atomics.sub(SegmentArray_u32, I.I_USAGE_COUNTER, 1);
-    Atomics.compareExchange(SegmentArray_i32, I.I_ALLOCATION_LOCK, I.LOCKED, I.UNLOCKED);
-    Atomics.notify(SegmentArray_i32, I.I_ALLOCATION_LOCK, 1);
-
-    return SegmentIndex << 16 | AllocationStackIndex;
-  };
-
-  DefragmentSegment(SegmentID){
-    if(SegmentID < (this.Data[I.I_MEMORY_SIZE] >> 18) - this.Data[I.I_ALLOCATION_SEGMENTS_COUNT] || SegmentID > (this.Data[I.I_MEMORY_SIZE] >> 18)){
-      return;
-    }
-    const SegmentArray_i32 = this.MemorySegments_i32[SegmentID];
-    const SegmentArray_u32 = this.MemorySegments_u32[SegmentID];
-
-    if(Atomics.compareExchange(SegmentArray_i32, I.I_MANAGEMENT_LOCK, I.UNLOCKED, I.LOCKED) !== I.UNLOCKED){
-      //Couldn't obtain management lock
-      return;
-    }
-
-    if(
-      Atomics.load(SegmentArray_u32, I.I_ALLOCATION_LOCK) !== I.UNLOCKED || //Some thread is allocating to this segment
-      Atomics.load(SegmentArray_u32, I.I_USAGE_COUNTER) > 0 || //Some thread is writing to this segment
-      Atomics.load(SegmentArray_u32, I.I_NEEDS_GPU_UPLOAD) !== 0 //Segment is waiting for gpu upload
-    ){
-      Atomics.store(SegmentArray_i32, I.I_MANAGEMENT_LOCK, I.UNLOCKED); //Free management lock
-      return; // Try again later
-    }
-
-    const Utilisation = (Math.min(65536 - Atomics.load(SegmentArray_u32, I.I_STACK), Atomics.load(SegmentArray_u32, I.I_LIST_END)) + Atomics.load(SegmentArray_u32, I.I_HEAP)) / 65536;
-    const Collectable = Atomics.load(SegmentArray_u32, I.I_DEALLOCATION_COUNT) / 65536;
-
-    if(!(Collectable !== 0 && (Utilisation > 0.87 || (Utilisation > 0.75 && Collectable > 0.1) || (Utilisation > 0.5 && Collectable > 0.2) || Collectable > 0.3))){
-      //Not "worth" defragmenting now, lift lock and return
-      Atomics.store(SegmentArray_i32, I.I_MANAGEMENT_LOCK, 0);
-      Atomics.notify(SegmentArray_i32, I.I_MANAGEMENT_LOCK);
-      return;
-    }
-
-    //Defragment. May need to change this to use atomic operations due to possible cache issues?
-    let CurrentOldIndex = 0;
-    let CurrentNewIndex = 0;
-    let CurrentListIndex = Math.min(SegmentArray_u32[I.I_LIST_START], SegmentArray_u32[I.I_LIST_END]);
-
-    const OldHeapIndex = SegmentArray_u32[I.I_HEAP];
-    while(CurrentOldIndex < OldHeapIndex){
-      const AllocationLength = SegmentArray_u32[CurrentOldIndex] >> 16 & 65535;
-      const AllocationStackIndex = ~(SegmentArray_u32[CurrentOldIndex] & 65535) & 65535;
-
-      if((SegmentArray_u32[AllocationStackIndex] & 1) === 0){ //This means that the allocation wasn't freed
-        //Only copy if the indices have diverged
-        if(CurrentNewIndex !== CurrentOldIndex){
-          //Set new heap index
-          SegmentArray_u32[AllocationStackIndex] = CurrentNewIndex;
-          //Copy it to the new location
-          for(let i = 0; i < AllocationLength; ++i){
-            SegmentArray_u32[CurrentNewIndex++] = SegmentArray_u32[CurrentOldIndex++];
-          }
-        } else CurrentOldIndex += AllocationLength;
-      } else{
-        CurrentOldIndex += AllocationLength;
-        SegmentArray_u32[CurrentListIndex--] = AllocationStackIndex; //Add deallocated stack index to free list
-      }
-    }
-    SegmentArray_u32[I.I_LIST_END] = CurrentListIndex;
-    SegmentArray_u32[I.I_HEAP] = CurrentNewIndex;
-    SegmentArray_u32[I.I_DEALLOCATION_COUNT] = 0;
-
-    //Lift management lock
-    Atomics.store(SegmentArray_i32, I.I_MANAGEMENT_LOCK, 0);
-    Atomics.notify(SegmentArray_i32, I.I_MANAGEMENT_LOCK);
-  }
-
-  DeallocateMemory(SegmentIndex, StackIndex){
-    //I (hopefully) don't need to care about locks for this
-    const SegmentArray_u32 = this.MemorySegments_u32[SegmentIndex];
-
-    const Freeable = Atomics.load(SegmentArray_u32, StackIndex) & 65535; //Gets allocation size
-    Atomics.add(SegmentArray_u32, I.I_DEALLOCATION_COUNT, Freeable); //Add allocation size to the amount of freeable memory
-    Atomics.or(SegmentArray_u32, StackIndex, 1); // Mark as unloaded
-  }
-
-  RequestGPUUpload(SegmentIndex, StackIndex){
-    const SegmentArray_u32 = this.MemorySegments_u32[SegmentIndex];
-    Atomics.add(SegmentArray_u32, I.I_NEEDS_GPU_UPLOAD, Atomics.load(SegmentArray_u32, StackIndex) & 65535);
-  }
 
   GenerateVoxelPassFramebuffer(){
     this.FramebufferTexture = gl.createTexture();
@@ -1569,6 +759,8 @@ class Main{
     gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, Canvas.width, Canvas.height);
     gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.Renderbuffer);
   }
+
+
   Resize(){
     Canvas.width = window.innerWidth * this.CanvasScale;
     Canvas.height = window.innerHeight * this.CanvasScale;
@@ -1620,52 +812,57 @@ class Main{
 
 
     let UploadCounter = 0;
-    const UpdatedLODLevels = this.Data[I.I_UPDATED_LOD_LEVELS_MASK];
+    const UpdatedLODLevels = this.Data[M.I_UPDATED_LOD_LEVELS_MASK];
     let UploadedLODLevels = 0;
+
+
     Outer: for(let Level = 0; Level < 16; ++Level){
       if(((UpdatedLODLevels >> Level) & 1) === 0) continue;
 
-      const Offset = this.Data[I.I_WORLD_GRID_INDEX] + (Level << 15);
+      const Offset = this.Data[M.I_WORLD_GRID_INDEX] + (Level << 15);
       for(let z = 0; z < 32; ++z) for(let y = 0; y < 32; ++y) for(let x = 0; x < 32; ++x){
         if(UploadCounter > 1) break Outer;
-        if(((this.Data[I.I_FULLY_UPLOADED_BITMAP_START + (Level << 10 | z << 5 | y)] >> x) & 1) === 1) continue; //Something else should handle setting this to unuploaded (e.g. in the event that the world offset moves)
+        if(((this.Data[M.I_FULLY_UPLOADED_BITMAP_START + (Level << 10 | z << 5 | y)] >> x) & 1) === 1) continue; //Something else should handle setting this to unuploaded (e.g. in the event that the world offset moves)
         const Region128_SegmentAndStackIndex = this.Data[Offset | z << 10 | y << 5 | x];
         if(Region128_SegmentAndStackIndex === 0){
-          this.Data[I.I_FULLY_UPLOADED_BITMAP_START + (Level << 10 | z << 5 | y)] |= 1 << x;
+          //TODO: I should set it to fully uploaded, but only if I'm sure that I have finished generating the region.
+          //this.Data[M.I_FULLY_UPLOADED_BITMAP_START + (Level << 10 | z << 5 | y)] |= 1 << x;
           continue;
         }
-        Atomics.add(this.Data, (Region128_SegmentAndStackIndex & ~65535) | I.I_USAGE_COUNTER, 1);
-        if(Atomics.load(this.Data, (Region128_SegmentAndStackIndex & ~65535) | I.I_MANAGEMENT_LOCK)){
-          Atomics.sub(this.Data, (Region128_SegmentAndStackIndex & ~65535) | I.I_USAGE_COUNTER, 1);
+        Atomics.add(this.Data, (Region128_SegmentAndStackIndex & ~65535) | M.I_USAGE_COUNTER, 1);
+        if(Atomics.load(this.Data, (Region128_SegmentAndStackIndex & ~65535) | M.I_MANAGEMENT_LOCK)){
+          Atomics.sub(this.Data, (Region128_SegmentAndStackIndex & ~65535) | M.I_USAGE_COUNTER, 1);
           continue;
         }
+
         //This is for uploading the 128³ that holds references to the 16³s
-        if(Atomics.load(this.Data, (Region128_SegmentAndStackIndex & ~65535) | I.I_NEEDS_GPU_UPLOAD) !== 0){
+        if(Atomics.load(this.Data, (Region128_SegmentAndStackIndex & ~65535) | M.I_NEEDS_GPU_UPLOAD) !== 0){
           UploadCounter++;
           this.UploadSegment(Region128_SegmentAndStackIndex >> 16);
           UploadedLODLevels |= 1 << Level;
-          Atomics.store(this.Data, (Region128_SegmentAndStackIndex & ~65535) | I.I_NEEDS_GPU_UPLOAD, 0);
+          Atomics.store(this.Data, (Region128_SegmentAndStackIndex & ~65535) | M.I_NEEDS_GPU_UPLOAD, 0);
         }
         const Region128_HeapIndex = (Region128_SegmentAndStackIndex & ~65535) | Atomics.load(this.Data, Region128_SegmentAndStackIndex);
         const Length = this.Data[Region128_HeapIndex + 530];
         for(let i = 0; i < Length; ++i){
           const LocalCoordinate = this.Data[Region128_HeapIndex + 531 + i];
           const ChildSegmentAndStackIndex = this.Data[Region128_HeapIndex + 18 + LocalCoordinate];
-          if(Atomics.load(this.Data, (ChildSegmentAndStackIndex & ~65535) | I.I_NEEDS_GPU_UPLOAD) !== 0){
+          if(Atomics.load(this.Data, (ChildSegmentAndStackIndex & ~65535) | M.I_NEEDS_GPU_UPLOAD) !== 0){
             UploadCounter++;
             this.UploadSegment(ChildSegmentAndStackIndex >> 16);
             UploadedLODLevels |= 1 << Level;
-            Atomics.store(this.Data, (ChildSegmentAndStackIndex & ~65535) | I.I_NEEDS_GPU_UPLOAD, 0);
+            Atomics.store(this.Data, (ChildSegmentAndStackIndex & ~65535) | M.I_NEEDS_GPU_UPLOAD, 0);
           }
         }
-        this.Data[I.I_FULLY_UPLOADED_BITMAP_START + (Level << 10 | z << 5 | y)] |= 1 << x;
+        this.Data[M.I_FULLY_UPLOADED_BITMAP_START + (Level << 10 | z << 5 | y)] |= 1 << x;
 
-        Atomics.sub(this.Data, (Region128_SegmentAndStackIndex & ~65535) | I.I_USAGE_COUNTER, 1);
+        Atomics.sub(this.Data, (Region128_SegmentAndStackIndex & ~65535) | M.I_USAGE_COUNTER, 1);
       }
-      this.Data[I.I_UPDATED_LOD_LEVELS_MASK] &= ~(1 << Level);
+      this.Data[M.I_UPDATED_LOD_LEVELS_MASK] &= ~(1 << Level);
     }
     for(let Level = 0; Level < 16; ++Level) if(((UploadedLODLevels >> Level) & 1) === 1) this.UploadSegment(1 + Level);
     if(UpdatedLODLevels !== 0) this.UploadSegment(0); //This is to update the fully uploaded bitmap
+    //for(let i = 0; i < 128; ++i) this.UploadSegment(i);
 
     const UpdateRegion = this.CullRegions(ModelViewProjectionMatrix);
 
@@ -1751,7 +948,7 @@ class Main{
 
     const RenderRegions = [];
 
-    const WorldGridStart = this.Data[I.I_WORLD_GRID_INDEX];
+    const WorldGridStart = this.Data[M.I_WORLD_GRID_INDEX];
     for(let z = 0; z < 32; ++z) for(let y = 0; y < 32; ++y) Iterator: for(let x = 0; x < 32; ++x){
       const Allocation128SegmentAndStackIndex = this.Data[WorldGridStart + (z << 10 | y << 5 | x)];
       if(Allocation128SegmentAndStackIndex === 0) continue;
