@@ -9,6 +9,51 @@ export default class MemoryManager{
     this.MemorySize = this.u32[M.I_MEMORY_SIZE];
     this.MemorySegments = this.MemorySize >> 18;
   }
+  //Important: This should only be called once in the program!
+  InitialiseMemory(){
+    this.u32[M.I_MEMORY_SIZE] = this.MemoryBuffer.byteLength; //In bytes
+    this.MemorySize = this.u32[M.I_MEMORY_SIZE];
+    this.MemorySegments = this.MemorySize >> 18;
+
+    const HeightDataArraysCount = 64;
+    let ByteIndex = 16 * 4; //Before this are the memory-wide header variables
+
+    this.u32[M.I_HEIGHT_DATA_INFO_INDEX] = ByteIndex >> 2;
+
+    //Nothing to do, memory is already initialised to zeros
+    ByteIndex += HeightDataArraysCount * 2 * 4;
+
+
+    ByteIndex = (ByteIndex + 262143) & ~262143; //Round up to next 262144 alignment
+
+
+    //this.WorldGrid = new Uint32Array(this.MemoryBuffer, ByteIndex, 32*32*32*16); //Allocates 2MB
+    this.u32[M.I_WORLD_GRID_INDEX] = ByteIndex >> 2;
+    ByteIndex += 32*32*32*16*4;
+
+    //this.WorldGridInfo = new Uint32Array(this.MemoryBuffer, ByteIndex, 8*32*32*16); //Allocates 512 KB
+    this.u32[M.I_WORLD_GRID_INFO_INDEX] = ByteIndex >> 2;
+    ByteIndex += 8*32*32*16*4;
+
+
+    this.HeightDataArrays = [];
+    this.u32[M.I_HEIGHT_DATA_INDEX] = ByteIndex >> 2;
+    this.u32[M.I_HEIGHT_DATA_COUNT] = HeightDataArraysCount;
+
+    for(let i = 0; i < HeightDataArraysCount; ++i){ //Allocates 4MB in total, HeightDataArraysCount == 64
+      this.HeightDataArrays.push(new Float32Array(this.MemoryBuffer, ByteIndex, 128*128));
+      ByteIndex += 128*128*4;
+    }
+
+    for(; ByteIndex < this.MemorySize; ByteIndex += 65536 * 4 /* => 65536 u32s */){
+      this.u32[ByteIndex >> 2 | M.I_STACK] = 65527;
+      this.u32[ByteIndex >> 2 | M.I_LIST_END] = 65527;
+
+      this.u32[M.I_ALLOCATION_SEGMENTS_COUNT]++;
+    }
+
+    this.u32[M.I_ALLOCATION_SEGMENTS_LIST_INDEX] = (this.u32[M.I_MEMORY_SIZE] >> 18) - this.u32[M.I_ALLOCATION_SEGMENTS_COUNT];
+  }
   Allocate(Size, Temporary){
     //if(Size & 1) Size++; //Make size even. The size passed into the function should include space for the header (1x uint32, 4 bytes)
     const Max = this.MemorySize >> 18;

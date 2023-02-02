@@ -1,5 +1,5 @@
 import "./GLMath.mjs";
-//import GetHeight from "./GetHeight.mjs";
+import MemoryManager from "./MemoryManager.mjs";
 import * as M from "./Constants/Memory.mjs";
 import * as W from "./Constants/Worker.mjs";
 
@@ -503,27 +503,7 @@ const fsh2 = `#version 300 es
   }
 `;
 
-function GaussianKernel(Radius, Sigma){
-  const Width = Radius * 2 + 1;
-  const Kernel = new Float32Array(Width * Width);
-  const SigmaSquared = Sigma * Sigma;
-  let Sum = 0.;
-  for(let x = 0; x < Width; ++x) for(let y = 0; y < Width; ++y){
-    const XWeight = x - Radius;
-    const YWeight = y - Radius;
-    const Value = Math.exp(-.5 * ((XWeight / Sigma) ** 2 + (YWeight / Sigma) ** 2)) / (2. * Math.PI * SigmaSquared);
-    Sum += Value;
-    Kernel[x * Width + y] = Value;
-  }
-  for(let i = Width * Width; i >= 0; --i) Kernel[i] /= Sum;
-  return Kernel;
-}
 
-
-
-const ChunkSphereRadius = Math.sqrt(3. * (128. / 2.) ** 2.);
-
-//2634, 2694, 2552, 2526, 2593
 class Main{
   constructor(){
     this.FOV = 70.;
@@ -588,6 +568,11 @@ class Main{
     gl.bindBuffer(gl.ARRAY_BUFFER, this.EmptyBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Uint32Array(1), gl.STATIC_DRAW);
 
+    this.Memory = new MemoryManager(this.MemoryBuffer);
+    this.Memory.InitialiseMemory();
+
+
+
 
     this.Worker = new Worker("./Worker.mjs", {"name": "Worker1", "type": "module"});
     this.Worker.onmessage = function(Event){
@@ -606,65 +591,6 @@ class Main{
     });
 
 
-    const HeightDataArraysCount = 64;
-
-
-    let ByteIndex = 0;
-
-
-
-    this.Data[M.I_MEMORY_SIZE] = this.MemorySize; //In bytes
-
-    ByteIndex = 16 * 4;
-
-    this.Data[M.I_HEIGHT_DATA_INFO_INDEX] = ByteIndex >> 2;
-
-    //Nothing to do, memory is already initialised to zeros
-    ByteIndex += HeightDataArraysCount * 2 * 4;
-
-
-    ByteIndex = (ByteIndex + 262143) & ~262143; //Round up to next 262144 alignment
-
-
-    this.WorldGrid = new Uint32Array(this.MemoryBuffer, ByteIndex, 32*32*32*16); //Allocates 2MB
-    this.Data[M.I_WORLD_GRID_INDEX] = ByteIndex >> 2;
-    ByteIndex += 32*32*32*16*4;
-
-    this.WorldGridInfo = new Uint32Array(this.MemoryBuffer, ByteIndex, 8*32*32*16); //Allocates 512 KB
-    this.Data[M.I_WORLD_GRID_INFO_INDEX] = ByteIndex >> 2;
-    ByteIndex += 8*32*32*16*4;
-
-
-    this.HeightDataArrays = [];
-    this.Data[M.I_HEIGHT_DATA_INDEX] = ByteIndex >> 2;
-    this.Data[M.I_HEIGHT_DATA_COUNT] = HeightDataArraysCount;
-
-    for(let i = 0; i < HeightDataArraysCount; ++i){ //Allocates 4MB in total, HeightDataArraysCount == 64
-      this.HeightDataArrays.push(new Float32Array(this.MemoryBuffer, ByteIndex, 128*128));
-      ByteIndex += 128*128*4;
-    }
-    this.MemorySegments_i32 = [];
-    this.MemorySegments_u32 = [];
-
-    for(let i = 0; i < ByteIndex; i += 65536 * 4){ //Prefill non-existing memory segments with nulls for easier access
-      this.MemorySegments_i32.push(null);
-      this.MemorySegments_u32.push(null);
-    }
-
-    for(; ByteIndex < this.MemorySize; ByteIndex += 65536 * 4 /* => 65536 u32s */){
-      const MemorySegment_i32 = new Int32Array(this.MemoryBuffer, ByteIndex, 65536);
-      const MemorySegment_u32 = new Uint32Array(this.MemoryBuffer, ByteIndex, 65536);
-      MemorySegment_u32[M.I_STACK] = 65527;
-      MemorySegment_u32[M.I_LIST_END] = 65527;
-      this.MemorySegments_u32.push(MemorySegment_u32);
-      this.MemorySegments_i32.push(MemorySegment_i32);
-
-      this.Data[M.I_ALLOCATION_SEGMENTS_COUNT]++;
-    }
-
-    this.Data[M.I_ALLOCATION_SEGMENTS_LIST_INDEX] = (this.Data[M.I_MEMORY_SIZE] >> 18) - this.Data[M.I_ALLOCATION_SEGMENTS_COUNT];
-
-
 
 
     this.DataTexture = gl.createTexture();
@@ -672,7 +598,6 @@ class Main{
     gl.bindTexture(gl.TEXTURE_3D, this.DataTexture);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 8);
     gl.texStorage3D(gl.TEXTURE_3D, 1, gl.R32UI, 2048, 2048, this.MemorySize >> 22 >> 2); //Shifted by extra 2 because this size is in 4 byte integers
-    //gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, 2048, 2048, this.MemorySize >> 22 >> 2, gl.RED_INTEGER, gl.UNSIGNED_INT, this.Data);
 
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -928,6 +853,7 @@ class Main{
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   CullRegions(m){
+    const ChunkSphereRadius = Math.sqrt(3. * (128. / 2.) ** 2.);
     const FrustumPlanes = new Float64Array([
       m[3] + m[0], m[7] + m[4], m[11] + m[8], m[15] + m[12],
       m[3] - m[0], m[7] - m[4], m[11] - m[8], m[15] - m[12],
@@ -976,15 +902,12 @@ class Main{
       const Allocation128SegmentAndStackIndex = this.Data[WorldGridStart + RegionID];
 
       //TODO: This could be problematic, especially if this is accessed whilst the segment is being defragmented
-      const Allocation128SegmentIndex = Allocation128SegmentAndStackIndex >> 16;
-      const Allocation128StackIndex = Allocation128SegmentAndStackIndex & 65535;
-      const Allocation128SegmentArray = this.MemorySegments_u32[Allocation128SegmentIndex];
-      const Allocation128HeapIndex = Allocation128SegmentArray[Allocation128StackIndex];
+      const Allocation128HeapIndex = (Allocation128SegmentAndStackIndex & ~65535) | this.Data[Allocation128SegmentAndStackIndex];
 
       this.RenderListArray[i << 1 | 0] = RegionID; //Allocation128SegmentAndStackIndex;
       this.RenderListArray[i << 1 | 1] = this.RenderInstances;
 
-      const Instances = Allocation128SegmentArray[Allocation128HeapIndex + 530];
+      const Instances = this.Data[Allocation128HeapIndex + 530];
       this.RenderInstances += Instances;
     }
 

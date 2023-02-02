@@ -55,7 +55,7 @@ class WorkerMain{
 
 
 
-    for(let z128 = 0; z128 < 16; ++z128) for(let x128 = 0; x128 < 16; ++x128){
+    for(let z128 = 0; z128 < 31; ++z128) for(let x128 = 0; x128 < 31; ++x128){
       if(z128 === 7 && x128 === 0) console.time("Initialisation");
       //Find bounds for y values in 128² region
       let MinY = 32767;
