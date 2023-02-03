@@ -573,23 +573,35 @@ class Main{
 
 
 
+    this.Workers = [];
+    for(let i = 0; i < 1; ++i){
+      const iWorker = new Worker("./Worker.mjs", {"name": "Worker1", "type": "module"});
+      iWorker.onmessage = function(Event){
+        console.log(Event);
+      };
+      iWorker.onerror = function(Event){
+        console.log(Event);
+      };
+      iWorker.onmessageerror = function(Event){
+        console.log(Event);
+      };
+      iWorker.postMessage({
+        "Request": W.INITIALISE,
+        "MemoryBuffer": this.MemoryBuffer,
+        "ID": 1
+      });
+      this.Workers.push(iWorker);
+    }
 
-    this.Worker = new Worker("./Worker.mjs", {"name": "Worker1", "type": "module"});
-    this.Worker.onmessage = function(Event){
-      console.log(Event);
-    };
-    this.Worker.onerror = function(Event){
-      console.log(Event);
-    };
-    this.Worker.onmessageerror = function(Event){
-      console.log(Event);
-    };
-    this.Worker.postMessage({
-      "Request": W.INITIALISE,
-      "MemoryBuffer": this.MemoryBuffer,
-      "ID": 1
-    });
 
+
+    for(let z = 0; z < 31; ++z) for(let x = 0; x < 31; ++x){
+      this.Workers[(z * 31 + x) & 0].postMessage({
+        "Request": W.LOAD_REGION,
+        "x128": x,
+        "z128": z
+      });
+    }
 
 
 
