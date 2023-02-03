@@ -2,6 +2,9 @@ import "./GLMath.mjs";
 import MemoryManager from "./MemoryManager.mjs";
 import * as M from "./Constants/Memory.mjs";
 import * as W from "./Constants/Worker.mjs";
+import Camera from "./Controls/Camera.mjs";
+import KeyboardControls from "./Controls/KeyboardControls.mjs";
+import MouseControls from "./Controls/MouseControls.mjs";
 
 const Canvas = document.createElement("canvas");
 const gl = Canvas.getContext("webgl2", {
@@ -506,22 +509,19 @@ const fsh2 = `#version 300 es
 
 class Main{
   constructor(){
+    this.Camera = new Camera;
+    this.KeyboardControls = new KeyboardControls(this.Camera);
+    this.MouseControls = new MouseControls(this.Camera, Canvas);
+
     this.FOV = 70.;
     this.Near = 4.;
     this.Far = 24000.;
 
-    this.RotationX = 0.;
-    this.RotationY = 0.;
 
-    this.PositionX = 0.;
-    this.PositionY = 0.;
-    this.PositionZ = -3.;
 
     this.CanvasScale = 1.;
 
-    this.PositionX = this.PositionZ = -300., this.PositionY = 2400., this.RotationX = 2.356, this.RotationY = -.5;
-    //this.PositionX = this.PositionZ = 2348., this.PositionY = 2400., this.RotationX = Math.PI + 2.356, this.RotationY = -.5;
-    this.MovementSpeed = 1.025;//1.25;
+
     this.LastRender = 0.;
     this.Frames = 0;
 
@@ -574,7 +574,7 @@ class Main{
 
 
     this.Workers = [];
-    for(let i = 0; i < 1; ++i){
+    for(let i = 0; i < 4; ++i){
       const iWorker = new Worker("./Worker.mjs", {"name": "Worker1", "type": "module"});
       iWorker.onmessage = function(Event){
         console.log(Event);
@@ -596,7 +596,7 @@ class Main{
 
 
     for(let z = 0; z < 31; ++z) for(let x = 0; x < 31; ++x){
-      this.Workers[(z * 31 + x) & 0].postMessage({
+      this.Workers[(z * 31 + x) & 3].postMessage({
         "Request": W.LOAD_REGION,
         "x128": x,
         "z128": z
@@ -660,9 +660,6 @@ class Main{
     gl.bindBuffer(gl.ARRAY_BUFFER, this.EmptyBuffer);
     gl.vertexAttribPointer(0, 1, gl.UNSIGNED_INT, false, 0, 0);
     gl.enableVertexAttribArray(0);
-
-
-    this.SetupControls();
 
     window.addEventListener("resize", this.Resize().bind(this));
 
@@ -739,9 +736,9 @@ class Main{
     mat4.perspective(ProjectionMatrix, (this.FOV * Math.PI) / 180., Canvas.width / Canvas.height, this.Near, this.Far);
 
     const ModelViewMatrix = mat4.create();
-    mat4.rotate(ModelViewMatrix, ModelViewMatrix, -this.RotationY, [1, 0, 0]);
-    mat4.rotate(ModelViewMatrix, ModelViewMatrix, this.RotationX, [0, 1, 0]);
-    mat4.translate(ModelViewMatrix, ModelViewMatrix, [-this.PositionX, -this.PositionY, -this.PositionZ]);
+    mat4.rotate(ModelViewMatrix, ModelViewMatrix, -this.Camera.RotationY, [1, 0, 0]);
+    mat4.rotate(ModelViewMatrix, ModelViewMatrix, this.Camera.RotationX, [0, 1, 0]);
+    mat4.translate(ModelViewMatrix, ModelViewMatrix, [-this.Camera.PositionX, -this.Camera.PositionY, -this.Camera.PositionZ]);
 
     const ModelViewProjectionMatrix = mat4.create();
     mat4.mul(ModelViewProjectionMatrix, ProjectionMatrix, ModelViewMatrix);
@@ -845,7 +842,7 @@ class Main{
       false,
       ModelViewProjectionMatrix
     );
-    gl.uniform3f(this.VoxelUniforms.iCameraPosition, this.PositionX, this.PositionY, this.PositionZ);
+    gl.uniform3f(this.VoxelUniforms.iCameraPosition, this.Camera.PositionX, this.Camera.PositionY, this.Camera.PositionZ);
 
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.IndexBuffer);
     gl.drawElementsInstanced(gl.TRIANGLE_STRIP, this.IndexArray.length, gl.UNSIGNED_BYTE, 0, this.RenderInstances);
@@ -901,7 +898,7 @@ class Main{
         }
       }
 
-      RenderRegions.push(Math.floor(Math.hypot(X - this.PositionX, Y - this.PositionY, Z - this.PositionZ)) * 524288 + (0 << 15 | z << 10 | y << 5 | x));
+      RenderRegions.push(Math.floor(Math.hypot(X - this.Camera.PositionX, Y - this.Camera.PositionY, Z - this.Camera.PositionZ)) * 524288 + (0 << 15 | z << 10 | y << 5 | x));
       this.RenderListLength++;
     }
 
@@ -968,52 +965,6 @@ class Main{
       console.error(gl.getShaderInfoLog(Shader));
     }
     return Shader;
-  }
-  SetupControls(){
-    let IsPointerLocked = false;
-    Canvas.addEventListener("click", function(){
-      Canvas.requestPointerLock();
-      IsPointerLocked = Canvas === document.pointerLockElement;
-    });
-    document.addEventListener("pointerlockchange", function(){
-      IsPointerLocked = Canvas === document.pointerLockElement;
-    });
-    const PressedKeys = {};
-    document.addEventListener("keydown", function(Event){
-      PressedKeys[Event.code] = true;
-      switch(Event.code){
-        case "AltLeft":
-        case "Escape":{
-          if(IsPointerLocked) document.exitPointerLock();
-          return;
-        }
-      }
-    });
-    document.addEventListener("keyup", function(Event){
-      delete PressedKeys[Event.code];
-    });
-    document.addEventListener("mousemove", function(Event){
-      if(!IsPointerLocked) return;
-      this.RotationX += Event.movementX / 1000.;
-      this.RotationY += Event.movementY / 1000.;
-    }.bind(this));
-    let Last = window.performance.now();
-    void function Load(){
-      window.requestAnimationFrame(Load.bind(this));
-
-      const Now = window.performance.now();
-      const Difference = Now - Last;
-      Last = Now;
-
-      const MovementX = ~~PressedKeys["KeyW"] - ~~PressedKeys["KeyS"];
-      const MovementZ = ~~PressedKeys["KeyA"] - ~~PressedKeys["KeyD"];
-      const MovementY = ~~PressedKeys["Space"] - ~~PressedKeys["ShiftLeft"];
-      if(MovementX !== 0 || MovementY !== 0 || MovementZ !== 0){
-        this.PositionX -= this.MovementSpeed * Difference * (-Math.sin(this.RotationX) * MovementX + Math.cos(this.RotationX) * MovementZ);
-        this.PositionY += this.MovementSpeed * Difference * MovementY;
-        this.PositionZ -= this.MovementSpeed * Difference * (Math.cos(this.RotationX) * MovementX + Math.sin(this.RotationX) * MovementZ);
-      }
-    }.bind(this)();
   }
 }
 

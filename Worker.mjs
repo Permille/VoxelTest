@@ -552,7 +552,7 @@ class WorkerMain{
         this.Memory.RequestGPUUpload(PermanentAllocationSegmentAndStackIndex >> 16, PermanentAllocationSegmentAndStackIndex & 65535);
         Atomics.sub(this.u32, (PermanentAllocationSegmentAndStackIndex & ~65535) | M.I_USAGE_COUNTER, 1);
 
-        this.u32[Allocation128HeapIndex + 2 + (z16 << 1 | y16 >> 2)] |= 1 << ((y16 << 3) & 3) | x16;
+        this.u32[Allocation128HeapIndex + 2 + (z16 << 1 | y16 >> 2)] |= 1 << ((y16 & 3) << 3) | x16;
         this.u32[Allocation128HeapIndex + 2 + 16 + (z16 << 6 | y16 << 3 | x16)] = PermanentAllocationSegmentAndStackIndex;
       }
 
