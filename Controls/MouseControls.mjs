@@ -1,3 +1,5 @@
+import {AddEventListener, RemoveEventListener} from "../Events.mjs";
+
 export default class MouseControls{
   constructor(Camera, MouseElement){
     this.Camera = Camera;
@@ -6,10 +8,10 @@ export default class MouseControls{
     this.IsPointerLocked = false;
     this.MouseSensitivity = 1.;
 
-    this.MouseElement.addEventListener("click", this.HandleClick.bind(this));
-    document.addEventListener("pointerlockchange", this.HandlePointerLockChange.bind(this));
-    document.addEventListener("keydown", this.HandleKeyDown.bind(this));
-    document.addEventListener("mousemove", this.HandleMouseMove.bind(this));
+    this.HandleClickID = AddEventListener(this.MouseElement, "click", this.HandleClick.bind(this));
+    this.HandlePointerLockChangeID = AddEventListener(document, "pointerlockchange", this.HandlePointerLockChange.bind(this));
+    this.HandleKeyDownID = AddEventListener(document, "keydown", this.HandleKeyDown.bind(this));
+    this.HandleMouseMoveID = AddEventListener(document, "mousemove", this.HandleMouseMove.bind(this));
   }
   HandleKeyDown(Event){
     switch(Event.code){
@@ -30,6 +32,13 @@ export default class MouseControls{
   HandleMouseMove(Event){
     if(!this.IsPointerLocked) return;
     this.Camera.RotationX += Event.movementX / 1000.;
-    this.Camera.RotationY += Event.movementY / 1000.;
+    this.Camera.RotationY += Event.movementY / 1000. * (this.InvertY ? 1. : -1.) * this.MouseSensitivity;
+  }
+  Destroy(){
+    if(this.IsPointerLocked) document.exitPointerLock();
+    RemoveEventListener(this.HandleClickID);
+    RemoveEventListener(this.HandlePointerLockChangeID);
+    RemoveEventListener(this.HandleKeyDownID);
+    RemoveEventListener(this.HandleMouseMoveID);
   }
 };

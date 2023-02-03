@@ -1,14 +1,18 @@
+import {AddEventListener, RemoveEventListener} from "../Events.mjs";
+
 export default class KeyboardControls{
   constructor(Camera){
     this.Camera = Camera;
     this.MovementSpeed = 1.025;
     this.PressedKeys = new Map;
+    this.IsDestroyed = false;
 
-    document.addEventListener("keydown", this.HandleKeyDown.bind(this));
-    document.addEventListener("keyup", this.HandleKeyUp.bind(this));
+    this.HandleKeyDownID = AddEventListener(document, "keydown", this.HandleKeyDown.bind(this));
+    this.HandleKeyUpID = AddEventListener(document, "keyup", this.HandleKeyUp.bind(this));
 
     this.LastUpdate = window.performance.now();
     void function Load(){
+      if(this.IsDestroyed) return;
       window.requestAnimationFrame(Load.bind(this));
 
       const Now = window.performance.now();
@@ -33,5 +37,10 @@ export default class KeyboardControls{
   }
   HandleKeyUp(Event){
     this.PressedKeys.set(Event.code, false);
+  }
+  Destroy(){
+    this.IsDestroyed = true;
+    RemoveEventListener(this.HandleKeyDownID);
+    RemoveEventListener(this.HandleKeyUpID);
   }
 };
