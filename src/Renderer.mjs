@@ -5,6 +5,7 @@ import CubePassFsh from "./Shaders/CubePass.fsh";
 import Clear2u32Fsh from "./Shaders/Clear2u32.fsh";
 import FullscreenVsh from "./Shaders/Fullscreen.vsh";
 import VoxelPassFsh from "./Shaders/VoxelPass.fsh";
+import {AddEventListener, FireEvent} from "./Events.mjs";
 
 export default class Renderer{
   static IndexArray = new Uint8Array([0,1,2,3,4,3,5,1,6]);
@@ -21,6 +22,8 @@ export default class Renderer{
     });
     const gl = this.gl;
 
+    this.Events = new EventTarget;
+
     this.FOV = 70.;
     this.Near = 4.;
     this.Far = 24000.;
@@ -29,6 +32,7 @@ export default class Renderer{
 
     this.LastRender = 0.;
     this.Frames = 0;
+    this.FPS = 0;
 
     this.Renderbuffer = null; //These will be generated when Resize is called
     this.FramebufferTexture = null;
@@ -119,8 +123,14 @@ export default class Renderer{
     gl.vertexAttribPointer(0, 1, gl.UNSIGNED_INT, false, 0, 0);
     gl.enableVertexAttribArray(0);
 
-
     window.addEventListener("resize", this.Resize().bind(this));
+    this.InitialiseDependencies();
+  }
+  async InitialiseDependencies(){
+    await InitialisedMain;
+    Main.DebugInfo.Add(function(){
+      return this.FPS + " fps";
+    }.bind(this));
   }
   GenerateVoxelPassFramebuffer(){
     const gl = this.gl;
@@ -171,11 +181,13 @@ export default class Renderer{
   Render(){
     const gl = this.gl;
     const Now = window.performance.now();
-    /*if(Math.floor(this.LastRender / 1000.) !== Math.floor(Now / 1000.)){
-      this.UpdateStatistics();
-    }*/
+    if(Math.floor(this.LastRender / 1000.) !== Math.floor(Now / 1000.)){
+      this.FPS = this.Frames;
+      this.Frames = 0;
+    }
     this.LastRender = Now;
     this.Frames++;
+    FireEvent(this.Events, new CustomEvent("BeforeRender"));
 
     gl.useProgram(null);
 

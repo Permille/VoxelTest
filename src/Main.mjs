@@ -8,12 +8,13 @@ import KeyboardControls from "./Controls/KeyboardControls.mjs";
 import MouseControls from "./Controls/MouseControls.mjs";
 import Renderer from "./Renderer.mjs";
 import {AddEventListener} from "./Events.mjs";
+import DebugInfo from "./DebugInfo/DebugInfo.mjs";
+import DeferredPromise from "./Libraries/DeferredPromise.mjs";
 
 class Main{
   constructor(){
     this.MemorySize = 1 << 28; //256 MB
     this.MemoryBuffer = new SharedArrayBuffer(this.MemorySize);
-    this.Data = new Uint32Array(this.MemoryBuffer);
     this.Memory = new MemoryManager(this.MemoryBuffer);
     this.Memory.InitialiseMemory();
 
@@ -26,6 +27,7 @@ class Main{
     this.Renderer = new Renderer(Canvas, this.Camera, this.Memory);
     this.KeyboardControls = new KeyboardControls(this.Camera);
     this.MouseControls = new MouseControls(this.Camera, Canvas);
+    this.DebugInfo = new DebugInfo;
 
     this.Workers = [];
     for(let i = 0; i < 4; ++i){
@@ -60,14 +62,11 @@ class Main{
       this.Renderer.Render();
     }.bind(this)();
   }
-
-  UpdateStatistics(){
-    const Text = `${this.Frames} fps`;
-    FPS.innerText = Text;
-    this.Frames = 0;
-    return Text;
-  }
 }
+
+
 AddEventListener(window, "load", function(){
+  window.InitialisedMain = new DeferredPromise;
   window.Main = new Main;
+  InitialisedMain.resolve();
 });

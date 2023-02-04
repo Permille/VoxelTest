@@ -17,6 +17,12 @@ module.exports = {
   "experiments":{
     "topLevelAwait": true
   },
+  "resolveLoader":{
+    "alias":{
+      "TemplateCSSLoader": path.resolve(__dirname, "TemplateCSSLoader.js"),
+      "TemplateHTMLLoader": path.resolve(__dirname, "TemplateHTMLLoader.js")
+    }
+  },
   "module":{
     "rules":[
       {
@@ -29,11 +35,11 @@ module.exports = {
       },
       {
         "test": /\.css$/i,
-        "use": ["style-loader", "css-loader"]
+        "use": ["TemplateCSSLoader"]
       },
       {
         "test": /\.(html|xhtml)$/i,
-        "use": ["html-loader"]
+        "use": ["TemplateHTMLLoader"]
       },
       {
         "resourceQuery": /file/i,
