@@ -1,3 +1,5 @@
+import "./index.html?copy";
+import "./Escape.ttf?copy";
 import MemoryManager from "./MemoryManager.mjs";
 import * as M from "./Constants/Memory.mjs";
 import * as W from "./Constants/Worker.mjs";
@@ -5,23 +7,7 @@ import Camera from "./Controls/Camera.mjs";
 import KeyboardControls from "./Controls/KeyboardControls.mjs";
 import MouseControls from "./Controls/MouseControls.mjs";
 import Renderer from "./Renderer.mjs";
-
-const FPS = document.createElement("div");
-//FPS.style.filter = "url(#test) hue-rotate(90deg) saturate(300%)";
-FPS.style.filter = "url(#test) drop-shadow(0 -128px #000000) url(#test2)";
-FPS.style.overflow = "hidden";
-FPS.style.fontFamily = "ESCAPE";
-FPS.style.padding = "2px 3px 1px 3px";
-FPS.style.fontSize = "16px";
-//FPS.style.backgroundColor = "#7f7f7f7f";
-FPS.style.color = "#ffffff";
-FPS.style.position = "absolute";
-FPS.style.top = "0";
-FPS.style.left = "0";
-document.body.appendChild(FPS);
-
-
-
+import {AddEventListener} from "./Events.mjs";
 
 class Main{
   constructor(){
@@ -43,7 +29,7 @@ class Main{
 
     this.Workers = [];
     for(let i = 0; i < 4; ++i){
-      const iWorker = new Worker("./Worker.mjs", {"name": "Worker1", "type": "module"});
+      const iWorker = new Worker(new URL("./Worker.mjs", import.meta.url), {"name": "Worker" + i, "type": "module"});
       iWorker.onmessage = function(Event){
         console.log(Event);
       };
@@ -56,12 +42,10 @@ class Main{
       iWorker.postMessage({
         "Request": W.INITIALISE,
         "MemoryBuffer": this.MemoryBuffer,
-        "ID": 1
+        "ID": i
       });
       this.Workers.push(iWorker);
     }
-
-
 
     for(let z = 0; z < 31; ++z) for(let x = 0; x < 31; ++x){
       this.Workers[(z * 31 + x) & 3].postMessage({
@@ -84,5 +68,6 @@ class Main{
     return Text;
   }
 }
-
-window.Main = new Main;
+AddEventListener(window, "load", function(){
+  window.Main = new Main;
+});

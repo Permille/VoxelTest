@@ -1,3 +1,4 @@
 *.bil
-.idea_
 .idea
+node_modules/
+dist/
