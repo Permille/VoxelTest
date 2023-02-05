@@ -2,29 +2,11 @@ const ChildProcess = require("node:child_process");
 require("./Server.js");
 const {app, BrowserWindow} = require("electron");
 
-
-function OpenWindow(){
-
-  return Window;
-}
-let Window;
-function SendMessage(){
-
-}
-
-void async function(){
-  await app.whenReady();
-
-  const Process = Build();
-
-}();
-
 class Main{
   constructor(){
     this.Process = this.Build();
     this.Window = this.OpenWindow();
 
-    Window = OpenWindow();
     app.on("window-all-closed", function(){
       this.Window = this.OpenWindow();
     }.bind(this));

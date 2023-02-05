@@ -3,7 +3,7 @@ import {AddEventListener, RemoveEventListener} from "../Events.mjs";
 export default class KeyboardControls{
   constructor(Camera){
     this.Camera = Camera;
-    this.MovementSpeed = 1.025;
+    this.MovementSpeed = .025;
     this.PressedKeys = new Map;
     this.IsDestroyed = false;
 

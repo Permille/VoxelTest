@@ -5,6 +5,8 @@ import CubePassFsh from "./Shaders/CubePass.fsh";
 import Clear2u32Fsh from "./Shaders/Clear2u32.fsh";
 import FullscreenVsh from "./Shaders/Fullscreen.vsh";
 import VoxelPassFsh from "./Shaders/VoxelPass.fsh";
+import NearCubePassFsh from "./Shaders/NearCubePass.fsh";
+import NearCubePassVsh from "./Shaders/NearCubePass.vsh";
 import {AddEventListener, FireEvent} from "./Events.mjs";
 
 export default class Renderer{
@@ -39,12 +41,16 @@ export default class Renderer{
     this.Framebuffer = null;
 
 
+    this.NearCubeShaderProgram = this.InitShaderProgram(NearCubePassVsh, NearCubePassFsh);
     this.VoxelShaderProgram = this.InitShaderProgram(CubePassVsh, CubePassFsh);
     this.ProcessShaderProgram = this.InitShaderProgram(FullscreenVsh, VoxelPassFsh);
     this.ClearBufferShaderProgram = this.InitShaderProgram(FullscreenVsh, Clear2u32Fsh);
-    this.Attributes = this.GetAttributeLocations(this.VoxelShaderProgram, [
-      //"position",
-      //"color"
+    this.NearCubeUniforms = this.GetUniformLocations(this.NearCubeShaderProgram, [
+      "iFOV",
+      "iCameraPosition",
+      "iCameraRotation",
+      "iData",
+      "iResolution"
     ]);
     this.VoxelUniforms = this.GetUniformLocations(this.VoxelShaderProgram, [
       "iModelViewMatrix",
@@ -99,6 +105,16 @@ export default class Renderer{
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
 
+    gl.useProgram(this.NearCubeShaderProgram);
+    gl.bindAttribLocation(this.NearCubeShaderProgram, 0, "vEmpty");
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.EmptyBuffer);
+    gl.vertexAttribPointer(0, 1, gl.UNSIGNED_INT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
+
+    gl.uniform1i(this.NearCubeShaderProgram.iData, 0);
+
+
+
     gl.useProgram(this.VoxelShaderProgram);
 
     gl.bindAttribLocation(this.VoxelShaderProgram, 0, "vEmpty");
@@ -118,7 +134,7 @@ export default class Renderer{
     gl.uniform1i(this.ProcessUniforms.iData, 0);
 
 
-    gl.bindAttribLocation(this.VoxelShaderProgram, 0, "vEmpty");
+    gl.bindAttribLocation(this.ProcessShaderProgram, 0, "vEmpty");
     gl.bindBuffer(gl.ARRAY_BUFFER, this.EmptyBuffer);
     gl.vertexAttribPointer(0, 1, gl.UNSIGNED_INT, false, 0, 0);
     gl.enableVertexAttribArray(0);
@@ -279,6 +295,25 @@ export default class Renderer{
     gl.clear(gl.DEPTH_BUFFER_BIT);
 
 
+
+
+
+    gl.useProgram(this.NearCubeShaderProgram);
+
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.LEQUAL);
+    gl.enable(gl.CULL_FACE);
+    gl.cullFace(gl.BACK);
+
+    gl.uniform3f(this.NearCubeUniforms.iCameraPosition, this.Camera.PositionX, this.Camera.PositionY, this.Camera.PositionZ);
+    gl.uniform3f(this.NearCubeUniforms.iCameraRotation, this.Camera.RotationX, this.Camera.RotationY, 0.);
+    gl.uniform1f(this.NearCubeUniforms.iFOV, (this.FOV * Math.PI) / 180.);
+    gl.uniform2f(this.NearCubeUniforms.iResolution, window.innerWidth, window.innerHeight);
+
+    gl.disable(gl.CULL_FACE);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+
     gl.useProgram(this.VoxelShaderProgram);
 
     gl.enable(gl.DEPTH_TEST);
@@ -383,18 +418,9 @@ export default class Renderer{
 
     return Math.max(this.RenderListLength, PreviousRenderListLength);
   }
-
   SetCanvasScale(NewScale){
     this.CanvasScale = NewScale;
     this.Resize();
-  }
-  GetAttributeLocations(Program, Attributes){
-    const gl = this.gl;
-    const AttributesObject = {};
-    for(const Attribute of Attributes){
-      AttributesObject[Attribute] = gl.getAttribLocation(Program, Attribute);
-    }
-    return AttributesObject;
   }
   GetUniformLocations(Program, Uniforms){
     const gl = this.gl;

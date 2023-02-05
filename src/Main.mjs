@@ -62,6 +62,9 @@ class Main{
       this.Renderer.Render();
     }.bind(this)();
   }
+  GetUsedMemory(){
+
+  }
 }
 
 
