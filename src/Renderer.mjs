@@ -288,11 +288,11 @@ export default class Renderer{
     //Running a shader to clear the buffer is faster for some reason
     //TODO: I could use this to render the voxels that are clipped by the near plane
     //gl.clearBufferuiv(gl.COLOR, 0, new Uint32Array([0, 0, 0, 0]));
-    gl.useProgram(this.ClearBufferShaderProgram);
+    /*gl.useProgram(this.ClearBufferShaderProgram);
     gl.disable(gl.DEPTH_TEST);
     gl.disable(gl.CULL_FACE);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.clear(gl.DEPTH_BUFFER_BIT);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);*/
+    //gl.clear(gl.DEPTH_BUFFER_BIT);
 
 
 
@@ -301,7 +301,7 @@ export default class Renderer{
     gl.useProgram(this.NearCubeShaderProgram);
 
     gl.enable(gl.DEPTH_TEST);
-    gl.depthFunc(gl.LEQUAL);
+    gl.depthFunc(gl.ALWAYS);
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
 
