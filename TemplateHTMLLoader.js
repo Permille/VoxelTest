@@ -4,7 +4,7 @@ module.exports = function(Source){
   return `
     const File = \`${Source.replaceAll(/(`|\\)/g, "\\$1")}\`;
     let OriginalElement = null;
-    export default function Add(ClassID, ElementID = Math.random() * (2 ** 52)){
+    export default function Add(ClassID, ElementID = "_" + Math.random() * (2 ** 52)){
       if(OriginalElement === null){
         const Parser = new DOMParser;
         OriginalElement = Parser.parseFromString(File, "text/html").body.firstElementChild;
