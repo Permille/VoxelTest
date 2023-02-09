@@ -16,25 +16,25 @@ export default class SVGGraph{
     this.HorizontalSegments = [];
     this.VerticalSegments = [];
 
-    /*
-
     this.IsVisible = false;
     this.IntersectionObserver = new IntersectionObserver(function(Entries){
       if(Entries[0].isIntersecting) {
         this.IsVisible = true;
-        this.NeedsUpdate = true;
       }
       else this.IsVisible = false;
     }.bind(this), {
       root: null,
-      threshold: 0.1, // set offset 0.1 means trigger if atleast 10% of element in viewport
+      threshold: .1, // Requires that at least 10% of the element is in the viewport
     });
-    this.IntersectionObserver.observe(this.Graph);
-     */
+    this.IntersectionObserver.observe(this.Element);
+
     this.ValidXDivisions = [1, 2, 5, 10, 20, 30, 60, 90, 120, 300, 600, 900, 1800, 3600];
 
     this.TimeScale = 10000;
     this.Render();
+  }
+  AddDataPoint(DataPoint){
+    this.Data.push([Date.now(), DataPoint]);
   }
   GetHorizontalLine(ID, Height, Text, Width){
     let GroupElement;
@@ -138,6 +138,7 @@ export default class SVGGraph{
     return RoughStep;
   }
   Render(){
+    if(!this.IsVisible) return;
     const Now = Date.now();
     let MinValue = Infinity;
     let MaxValue = -Infinity;
@@ -208,6 +209,8 @@ export default class SVGGraph{
     let Start = -1;
     let End = -1;
 
+    const ZeroHeight = Math.max(Math.min(200 - (0 - MinValue) / (MaxValue - MinValue) * 200, 200), 0);
+
     Outer: while(true){
       for(let i = End + 1;; ++i){
         if(i === this.Data.length) break Outer;
@@ -225,7 +228,7 @@ export default class SVGGraph{
       const [FillElement, StrokeElement] = this.GetGraphSegment(SegmentID++);
 
       let PathString = "";
-      for(let i = Start; i < End; ++i){
+      for(let i = Start; i <= End; ++i){
         if(i === Start) PathString += "M";
         else PathString += " L";
         PathString += ` ${
@@ -235,7 +238,7 @@ export default class SVGGraph{
         }`;
       }
       StrokeElement.setAttributeNS(null, "d", PathString);
-      PathString += ` L ${(1 - (Now - this.Data[End][0]) / this.TimeScale) * GraphWidth} 200 L ${(1 - (Now - this.Data[Start][0]) / this.TimeScale) * GraphWidth} 200 Z`;
+      PathString += ` L ${(1 - (Now - this.Data[End][0]) / this.TimeScale) * GraphWidth} ${ZeroHeight} L ${(1 - (Now - this.Data[Start][0]) / this.TimeScale) * GraphWidth} ${ZeroHeight} Z`;
       FillElement.setAttributeNS(null, "d", PathString);
     }
     if(SegmentID < this.GraphSegments.length) for(const [FillElement, StrokeElement] of this.GraphSegments.splice(SegmentID)) this.Graph.removeChild(FillElement), this.Graph.removeChild(StrokeElement);

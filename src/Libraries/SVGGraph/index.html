@@ -1,44 +1,41 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 220">
-  <defs>
-    <clipPath id="GraphClipPath">
-      <path d="M 0 0 L 400 0 L 400 200 L 0 200" />
-    </clipPath>
-  </defs>
-  <g id="Wrapper" transform="translate(40, 0)">
-    <g id="Horizontal">
-    </g>
-    <g id="Vertical">
-      <!--<g transform="translate(25, 0)">
-        <line y2="205" stroke="#ffffff" stroke-opacity=".2" stroke-width="2"/>
-        <text dy="18" y="200" text-anchor="middle" fill="#ffffff">17:44:20</text>
+<div class="WrapperElement" id="WrapperElement" style="--opaque: #007fcfff; --transparent: #007fcf7f; --less-transparent: #007fcf9f">
+  <h1 id="GraphTitle">FPS</h1>
+  <div class="SettingsImage"></div>
+  <div class="SettingsAndGraphWrapper">
+    <p><ins id="CurrentValue" data-unit=" fps">60</ins></p>
+    <div class="SettingsMenu">
+      <form>
+        <p>Update frequency</p>
+        <input class="Slider" type="range" name="Range" min="0" max="8" value="0" oninput="this.form.Input.value = this.value || 0;" step="1" />
+        <input class="TextInput" type="number" name="Input" value="0" oninput="this.form.Range.value = this.value || 0;" step="any" />
+      </form>
+      <form>
+        <p>History length</p>
+        <input class="Slider" type="range" name="Range" min="0" max="8" value="0" oninput="this.form.Input.value = this.value || 0;" step="1" />
+        <input class="TextInput" type="number" name="Input" value="0" oninput="this.form.Range.value = this.value || 0;" step="any" />
+      </form>
+      <form>
+        <p>Max value</p>
+        <input class="Slider" type="range" name="Range" min="0" max="8" value="0" oninput="this.form.Input.value = this.value || 0;" step="1" />
+        <input class="TextInput" type="number" name="Input" value="0" oninput="this.form.Range.value = this.value || 0;" step="any" />
+      </form>
+      <form>
+        <p>Min value</p>
+        <input class="Slider" type="range" name="Range" min="0" max="8" value="0" oninput="this.form.Input.value = this.value || 0;" step="1" />
+        <input class="TextInput" type="number" name="Input" value="0" oninput="this.form.Range.value = this.value || 0;" step="any" />
+      </form>
+    </div>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 220">
+      <defs>
+        <clipPath id="GraphClipPath">
+          <path d="M 0 0 L 400 0 L 400 200 L 0 200" />
+        </clipPath>
+      </defs>
+      <g id="Wrapper" transform="translate(40, 0)">
+        <g id="Horizontal"></g>
+        <g id="Vertical"></g>
+        <g id="Graph" clip-path="url(#GraphClipPath)"></g>
       </g>
-      <g transform="translate(85, 0)">
-        <line y2="205" stroke="#ffffff" stroke-opacity=".2" stroke-width="2"/>
-        <text dy="18" y="200" text-anchor="middle" fill="#ffffff">17:44:30</text>
-      </g>
-      <g transform="translate(145, 0)">
-        <line y2="205" stroke="#ffffff" stroke-opacity=".2" stroke-width="2"/>
-        <text dy="18" y="200" text-anchor="middle" fill="#ffffff">17:44:40</text>
-      </g>
-      <g transform="translate(205, 0)">
-        <line y2="205" stroke="#ffffff" stroke-opacity=".2" stroke-width="2"/>
-        <text dy="18" y="200" text-anchor="middle" fill="#ffffff">17:44:50</text>
-      </g>
-      <g transform="translate(265, 0)">
-        <line y2="205" stroke="#ffffff" stroke-opacity=".2" stroke-width="2"/>
-        <text dy="18" y="200" text-anchor="middle" fill="#ffffff">17:45:00</text>
-      </g>
-      <g transform="translate(325, 0)">
-        <line y2="205" stroke="#ffffff" stroke-opacity=".2" stroke-width="2"/>
-        <text dy="18" y="200" text-anchor="middle" fill="#ffffff">17:45:10</text>
-      </g>
-      <g transform="translate(385, 0)">
-        <line y2="205" stroke="#ffffff" stroke-opacity=".2" stroke-width="2"/>
-        <text dy="18" y="200" text-anchor="middle" fill="#ffffff">17:45:20</text>
-      </g>-->
-    </g>
-    <g id="Graph" clip-path="url(#GraphClipPath)">
-
-    </g>
-  </g>
-</svg>
+    </svg>
+  </div>
+</div>

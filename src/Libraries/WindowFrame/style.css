@@ -19,4 +19,5 @@
 }
 .CLASS-Body{
     background-color: #0000007f;
+    overflow: hidden !important;
 }
