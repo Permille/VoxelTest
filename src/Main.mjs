@@ -10,7 +10,7 @@ import Renderer from "./Renderer.mjs";
 import {AddEventListener} from "./Events.mjs";
 import DebugInfo from "./DebugInfo/DebugInfo.mjs";
 import DeferredPromise from "./Libraries/DeferredPromise.mjs";
-import WindowFrame from "./WindowFrame/WindowFrame.mjs";
+import Inspector from "./Inspector/Inspector.mjs";
 
 class Main{
   constructor(){
@@ -30,11 +30,8 @@ class Main{
     this.MouseControls = new MouseControls(this.Camera, Canvas);
     this.DebugInfo = new DebugInfo;
 
-    this.WindowFrame = new WindowFrame;
-    const e = document.createElement("div");
-    e.textContent = "Hi this is a window's content :D";
-    this.WindowFrame.SetTitle("My window");
-    this.WindowFrame.SetBody(e);
+    this.Inspector = new Inspector;
+
     this.Workers = [];
     for(let i = 0; i < 4; ++i){
       const iWorker = new Worker(new URL("./Worker.mjs", import.meta.url), {"name": "Worker" + i, "type": "module"});

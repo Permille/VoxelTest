@@ -1,7 +1,8 @@
 import HTML from "./index.html";
 import CSS from "./style.css";
-import {AddEventListener, RemoveEventListener} from "../Events.mjs";
+import {AddEventListener, RemoveEventListener} from "../../Events.mjs";
 export default class WindowFrame{
+  static CurrentZIndex = 1;
   constructor(){
     [this.Element, this.ID] = HTML("WindowFrame");
     CSS("WindowFrame");
@@ -54,6 +55,7 @@ export default class WindowFrame{
       this.SetPosition(this.PositionX, this.PositionY);
     }.bind(this));
     this.ResizeStartID = AddEventListener(this.Element, "mousedown", function(Event){
+      this.Element.style.zIndex = "" + WindowFrame.CurrentZIndex++;
       if(Event.target !== this.Element) return; //Clicked something inside of window
       this.ResizeDirection[0] = Event.offsetX < 8 ? -1 : Event.offsetX > this.Width + 8 ? 1 : 0;
       this.ResizeDirection[1] = Event.offsetY < 8 ? -1 : Event.offsetY > this.Height + 8 ? 1 : 0;

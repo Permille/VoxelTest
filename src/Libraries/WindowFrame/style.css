@@ -6,7 +6,6 @@
     box-sizing: border-box;
     outline: 1px solid black;
     outline-offset: -8px;
-    /*backdrop-filter: blur(3px);*/
 }
 .CLASS-TitleBar{
     background-color: rgba(22, 175, 255, 0.7);
@@ -19,5 +18,5 @@
     padding: 1px 2px 1px 3px;
 }
 .CLASS-Body{
-
+    background-color: #0000007f;
 }
