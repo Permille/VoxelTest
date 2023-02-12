@@ -1,0 +1,21 @@
+.CLASS-Wrapper{
+    overflow: auto;
+    display: block;
+}
+.CLASS-Wrapper h1{
+    color: white;
+    font-size: 40px;
+    text-align: center;
+    font-weight: normal;
+}
+
+.CLASS-Graphs{
+    display: grid;
+    grid-template-columns: repeat(auto-fit, 450px);
+    align-content: space-around;
+    justify-content: space-evenly;
+    gap: 10px;
+}
+.CLASS-Graphs > *{
+    margin: 10px;
+}

@@ -12,6 +12,8 @@ export const I_ATOMIC_LOCKDOWN = 7;
 export const I_UPDATED_LOD_LEVELS_MASK = 8;
 export const I_WORLD_GRID_INFO_INDEX = 9;
 
+export const I_INFO_LOADED_CUBES_COUNTER = 16;
+
 export const I_HEIGHT_DATA_INFO_USAGE_COUNTER = 0;
 export const I_HEIGHT_DATA_INFO_MANAGEMENT_LOCK = 1;
 

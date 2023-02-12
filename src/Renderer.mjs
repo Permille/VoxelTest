@@ -26,6 +26,8 @@ export default class Renderer{
 
     this.Events = new EventTarget;
 
+    this.FrameTime = NaN;
+
     this.FOV = 70.;
     this.Near = 4.;
     this.Far = 24000.;
@@ -201,6 +203,7 @@ export default class Renderer{
       this.FPS = this.Frames;
       this.Frames = 0;
     }
+    this.FrameTime = Now - this.LastRender;
     this.LastRender = Now;
     this.Frames++;
     FireEvent(this.Events, new CustomEvent("BeforeRender"));
@@ -283,18 +286,6 @@ export default class Renderer{
 
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.Framebuffer);
     gl.viewport(0, 0, this.Canvas.width, this.Canvas.height);
-
-
-    //Running a shader to clear the buffer is faster for some reason
-    //TODO: I could use this to render the voxels that are clipped by the near plane
-    //gl.clearBufferuiv(gl.COLOR, 0, new Uint32Array([0, 0, 0, 0]));
-    /*gl.useProgram(this.ClearBufferShaderProgram);
-    gl.disable(gl.DEPTH_TEST);
-    gl.disable(gl.CULL_FACE);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);*/
-    //gl.clear(gl.DEPTH_BUFFER_BIT);
-
-
 
 
 

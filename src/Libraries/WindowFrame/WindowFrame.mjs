@@ -3,7 +3,7 @@ import CSS from "./style.css";
 import {AddEventListener, RemoveEventListener} from "../../Events.mjs";
 export default class WindowFrame{
   static CurrentZIndex = 1;
-  constructor(){
+  constructor(Width, Height, StrictDimensions){
     [this.Element, this.ID] = HTML("WindowFrame");
     CSS("WindowFrame");
     document.body.appendChild(this.Element);
@@ -13,8 +13,9 @@ export default class WindowFrame{
 
     this.PositionX = 0;
     this.PositionY = 0;
-    this.Width = 300;
-    this.Height = 200;
+    this.Width = Width;
+    this.Height = Height;
+    this.StrictDimensions = StrictDimensions;
     this.SetPosition(this.PositionX, this.PositionY);
     this.SetDimensions(this.Width, this.Height);
     this.Dragging = false;
@@ -72,15 +73,19 @@ export default class WindowFrame{
     RemoveEventListener(this.ResizeStartID);
   }
   SetDimensions(Width, Height){
+    this.Width = Width;
+    this.Height = Height;
     this.BodyElement.style.minWidth = this.BodyElement.style.maxWidth = Width + "px";
     this.BodyElement.style.minHeight = this.BodyElement.style.maxHeight = Height + "px";
 
-    const Rect = this.Element.getBoundingClientRect();
-    this.Width = Math.max(this.BodyElement.scrollWidth, Rect.width - 16);
-    this.Height = this.BodyElement.scrollHeight
+    if(this.StrictDimensions){
+      const Rect = this.Element.getBoundingClientRect();
+      this.Width = Math.max(this.BodyElement.scrollWidth, Rect.width - 16);
+      this.Height = this.BodyElement.scrollHeight
 
-    this.BodyElement.style.minWidth = this.Width;
-    this.BodyElement.style.minHeight = this.Height;
+      this.BodyElement.style.minWidth = this.Width;
+      this.BodyElement.style.minHeight = this.Height;
+    }
   }
   SetPosition(x, y){
     x = Math.min(x, window.innerWidth - 16);

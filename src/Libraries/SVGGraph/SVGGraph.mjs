@@ -6,13 +6,30 @@ import {AddEventListener} from "../../Events.mjs";
 import DeferredPromise from "../DeferredPromise.mjs";
 const NS = "http://www.w3.org/2000/svg";
 export default class SVGGraph{
-  constructor(GeneratorFunction){
+  constructor({
+    Title,
+    Unit,
+    GeneratorFunction,
+    Colour,
+    UpdateIntervalOptions = {},
+    RenderIntervalOptions = {},
+    HistoryLengthOptions = {},
+    MinimumValueOptions = {},
+    MaximumValueOptions = {}
+  }){
     [this.Element, this.ID] = HTML("SVGGraph", undefined, true);
     CSS("SVGGraph");
-
+    this.Title = Title;
+    this.Unit = Unit;
     this.GeneratorFunction = GeneratorFunction;
+    this.Colour = Colour;
 
     this.Data = [];
+
+    this.TitleElement = this.Element.querySelector(`#${this.ID}-GraphTitle`);
+    this.TitleElement.textContent = this.Title;
+    this.CurrentValueElement = this.Element.querySelector(`#${this.ID}-CurrentValue`);
+    this.CurrentValueElement.dataset.unit = " " + this.Unit;
 
     this.Graph = this.Element.querySelector(`#${this.ID}-Graph`);
     this.Horizontal = this.Element.querySelector(`#${this.ID}-Horizontal`);
@@ -21,15 +38,15 @@ export default class SVGGraph{
     this.SettingsMenu = this.Element.querySelector(`#${this.ID}-SettingsMenu`);
 
 
-    this.UpdateIntervalSlider = new WeightedSlider({"Name": "Update interval", "DefaultValue": 1000, "Weighting": function(x){return Math.floor(((x * 27.63) + 4.) ** 2.);}, "InverseWeighting": function(x){return ((x ** .5) - 4.) / 27.63;}});
+    this.UpdateIntervalSlider = new WeightedSlider({"Name": "Update interval", "DefaultValue": 1000, "Weighting": function(x){return Math.floor(((x * 27.63) + 4.) ** 2.);}, "InverseWeighting": function(x){return ((x ** .5) - 4.) / 27.63;}, ...UpdateIntervalOptions});
     this.SettingsMenu.appendChild(this.UpdateIntervalSlider.Element);
-    this.RenderIntervalSlider = new WeightedSlider({"Name": "Render interval", "DefaultValue": 16, "Weighting": function(x){return Math.floor(((x * 27.63) + 4.) ** 2.);}, "InverseWeighting": function(x){return ((x ** .5) - 4.) / 27.63;}});
+    this.RenderIntervalSlider = new WeightedSlider({"Name": "Render interval", "DefaultValue": 16, "Weighting": function(x){return Math.floor(((x * 27.63) + 4.) ** 2.);}, "InverseWeighting": function(x){return ((x ** .5) - 4.) / 27.63;}, ...RenderIntervalOptions});
     this.SettingsMenu.appendChild(this.RenderIntervalSlider.Element);
-    this.HistoryLengthSlider = new WeightedSlider({"Name": "History length", "DefaultValue": 15, "Weighting": function(x){return Math.floor(((x * 3.978) + 1.5) ** 4.);}, "InverseWeighting": function(x){return ((x ** .25) - 1.5) / 3.978;}});
+    this.HistoryLengthSlider = new WeightedSlider({"Name": "History length", "DefaultValue": 15, "Weighting": function(x){return Math.floor(((x * 3.978) + 1.5) ** 4.);}, "InverseWeighting": function(x){return ((x ** .25) - 1.5) / 3.978;}, ...HistoryLengthOptions});
     this.SettingsMenu.appendChild(this.HistoryLengthSlider.Element);
-    this.MinimumValueSlider = new Slider({"Name": "Minimum value", "MinValue": 0, "MaxValue": 1000, "DefaultValue": 0, "Disabled": true});
+    this.MinimumValueSlider = new Slider({"Name": "Minimum value", "MinValue": 0, "MaxValue": 1000, "DefaultValue": 0, "Disabled": true, ...MinimumValueOptions});
     this.SettingsMenu.appendChild(this.MinimumValueSlider.Element);
-    this.MaximumValueSlider = new Slider({"Name": "Maximum value", "MinValue": 0, "MaxValue": 1000, "DefaultValue": 1000, "Disabled": true});
+    this.MaximumValueSlider = new Slider({"Name": "Maximum value", "MinValue": 0, "MaxValue": 1000, "DefaultValue": 1000, "Disabled": true, ...MaximumValueOptions});
     this.SettingsMenu.appendChild(this.MaximumValueSlider.Element);
 
     this.UpdateInterval = this.RenderInterval = this.HistoryLength = this.MinimumValue = this.MaximumValue = null;
@@ -78,8 +95,12 @@ export default class SVGGraph{
       this.Render();
     }.call(this);
   }
+  ConvertNumberToText(n){
+    return "" + ((Math.abs(n) < 1e-4 || Math.abs(n) > 1e6) && n !== 0 ? n.toExponential(5).replace(/\.([0-9]*[1-9])?0*/g, ".$1").replace(/\.e/, ".0e") : Number.parseFloat(n.toFixed(5)));
+  }
   AddDataPoint(DataPoint){
     this.Data.push([Date.now(), DataPoint]);
+    this.CurrentValueElement.textContent = this.ConvertNumberToText(DataPoint);
   }
   GetHorizontalLine(ID, Height, Text, Width){
     let GroupElement;
@@ -143,10 +164,10 @@ export default class SVGGraph{
   GetGraphSegment(ID){
     if(this.GraphSegments.length <= ID){
       const FillElement = document.createElementNS(NS, "path");
-      FillElement.setAttributeNS(null, "fill", "rebeccapurple");
+      FillElement.setAttributeNS(null, "fill", this.Colour);
       FillElement.setAttributeNS(null, "fill-opacity", ".5");
       const StrokeElement = document.createElementNS(NS,"path");
-      StrokeElement.setAttributeNS(null, "stroke", "rebeccapurple");
+      StrokeElement.setAttributeNS(null, "stroke", this.Colour);
       StrokeElement.setAttributeNS(null, "stroke-width", "3");
       StrokeElement.setAttributeNS(null, "fill", "none");
       this.GraphSegments.push([FillElement, StrokeElement]);
@@ -219,7 +240,7 @@ export default class SVGGraph{
     for(let i = 0, CurrentY = Math.floor(MinValue / YStep) * YStep; i < 10; ++i, CurrentY += YStep){
       if(CurrentY < MinValue) continue;
       if(CurrentY > MaxValue) break;
-      const Text = "" + ((Math.abs(CurrentY) < 1e-4 || Math.abs(CurrentY) > 1e6) && CurrentY !== 0 ? CurrentY.toExponential(5).replace(/\.([0-9]*[1-9])?0*/g, ".$1").replace(/\.e/, ".0e") : Number.parseFloat(CurrentY.toFixed(5)));
+      const Text = this.ConvertNumberToText(CurrentY);
       MaxHorizontalTextLength = Math.max(MaxHorizontalTextLength, Text.length);
       HorizontalLines.push([((MaxValue - CurrentY) / YRange) * 200., Text]);
     }

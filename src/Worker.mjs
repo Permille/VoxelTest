@@ -4,6 +4,7 @@ import MemoryManager from "./MemoryManager.mjs";
 import IterableSet from "./DataStructures/IterableSet.mjs";
 import GetHeight from "./GetHeight.mjs";
 import {LOAD_REGION} from "./Constants/Worker.mjs";
+import {I_INFO_LOADED_CUBES_COUNTER} from "./Constants/Memory.mjs";
 
 const Heights = new Float32Array(256 * 256);
 for(let z = 0; z < 256; ++z) for(let x = 0; x < 256; ++x){
@@ -551,6 +552,8 @@ class WorkerMain{
 
         this.Memory.RequestGPUUpload(PermanentAllocationSegmentAndStackIndex >> 16, PermanentAllocationSegmentAndStackIndex & 65535);
         Atomics.sub(this.u32, (PermanentAllocationSegmentAndStackIndex & ~65535) | M.I_USAGE_COUNTER, 1);
+
+        Atomics.add(this.u32, M.I_INFO_LOADED_CUBES_COUNTER, 1);
 
         this.u32[Allocation128HeapIndex + 2 + (z16 << 1 | y16 >> 2)] |= 1 << ((y16 & 3) << 3) | x16;
         this.u32[Allocation128HeapIndex + 2 + 16 + (z16 << 6 | y16 << 3 | x16)] = PermanentAllocationSegmentAndStackIndex;

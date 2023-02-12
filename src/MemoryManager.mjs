@@ -1,4 +1,5 @@
 import * as M from "./Constants/Memory.mjs";
+import {I_DEALLOCATION_COUNT, I_STACK, I_USAGE_COUNTER} from "./Constants/Memory.mjs";
 
 export default class MemoryManager{
   constructor(MemoryBuffer){
@@ -199,5 +200,34 @@ export default class MemoryManager{
 
   RequestGPUUpload(SegmentIndex, StackIndex){
     Atomics.add(this.u32, SegmentIndex << 16 | M.I_NEEDS_GPU_UPLOAD, Atomics.load(this.u32, SegmentIndex << 16 | StackIndex) & 65535);
+  }
+
+  GetUsedMemory(){
+    const MemorySegments = this.u32[M.I_MEMORY_SIZE] >> 18;
+    const FirstSegment = MemorySegments - this.u32[M.I_ALLOCATION_SEGMENTS_COUNT];
+    let TotalUsed = FirstSegment << 16;
+    for(let i = FirstSegment; i < MemorySegments; ++i){
+      TotalUsed += 65535 - this.u32[i << 16 | M.I_STACK] + this.u32[i << 16 | M.I_HEAP];
+    }
+    return TotalUsed << 2; //Shifting by 2 to get the consumption in bytes, not in i32s
+  }
+
+  GetCollectableMemory(){
+    const MemorySegments = this.u32[M.I_MEMORY_SIZE] >> 18
+    const FirstSegment = MemorySegments - this.u32[M.I_ALLOCATION_SEGMENTS_COUNT];
+    let Total = 0;
+    for(let i = FirstSegment; i < MemorySegments; ++i){
+      Total += this.u32[i << 16 | M.I_DEALLOCATION_COUNT];
+    }
+    return Total << 2; //Shifting by 2 to get the consumption in bytes, not in i32s
+  }
+  GetUnlockedCollectableMemory(){
+    const MemorySegments = this.u32[M.I_MEMORY_SIZE] >> 18
+    const FirstSegment = MemorySegments - this.u32[M.I_ALLOCATION_SEGMENTS_COUNT];
+    let Total = 0;
+    for(let i = FirstSegment; i < MemorySegments; ++i){
+      if(this.u32[i << 16 | M.I_USAGE_COUNTER] === 0) Total += this.u32[i << 16 | M.I_DEALLOCATION_COUNT];
+    }
+    return Total << 2; //Shifting by 2 to get the consumption in bytes, not in i32s
   }
 };
