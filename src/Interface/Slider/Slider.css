@@ -1,0 +1,86 @@
+.CLASS-Wrapper{
+    display: flex;
+    padding: 5px;
+}
+
+.CLASS-Wrapper:hover{
+    background-color: #0000003f;
+}
+
+.CLASS-Wrapper.CLASS-Disabled{
+    filter: opacity(.5);
+    background-color: #7f7f7f5f;
+}
+.CLASS-Wrapper.CLASS-Disabled *{
+    pointer-events: none;
+}
+
+.CLASS-Name{
+    flex-grow: 0;
+    width: fit-content;
+    margin-bottom: 0;
+    margin-right: auto;
+    line-height: 32px;
+    font-size: 24px;
+}
+.CLASS-Slider{
+    width: 100px;
+    max-width: 150px;
+    flex-grow: 1;
+    margin-right: 5px;
+}
+.CLASS-Slider::-webkit-slider-thumb{
+    background-color: var(--opaque);
+}
+
+.CLASS-Wrapper input{
+    border: 0;
+    outline: 0;
+}
+
+.CLASS-Wrapper .CLASS-TextInput{
+    width: 40px;
+    max-width: 60px;
+    flex-grow: 1;
+    background-color: var(--transparent);
+    border: 3px solid var(--less-transparent);
+}
+
+
+
+.CLASS-Slider{
+    -webkit-appearance: none;
+    appearance: none;
+    width: 200px;
+    height: 10px;
+    margin-block: 12px;
+
+    background-color: #afafaf7f;
+    outline: none;
+}
+.CLASS-Slider::-webkit-slider-thumb{
+    -webkit-appearance: none;
+    appearance: none;
+    width: 10px;
+    height: 34px;
+    background-color: var(--opaque);
+    cursor: e-resize;
+}
+
+.CLASS-TextInput{
+    font-size: 24px;
+    font-family: Escape;
+    background-color: #007faf9f;
+    color: #ffffff;
+    border-color: #007faf7f;
+    border-width: 3px;
+    border-style: solid;
+    box-sizing: border-box;
+    text-align: center;
+}
+.CLASS-TextInput::-webkit-outer-spin-button,
+.CLASS-TextInput::-webkit-inner-spin-button{
+    -webkit-appearance: none;
+    appearance: none;
+    margin: 0;
+}

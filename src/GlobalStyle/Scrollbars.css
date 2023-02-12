@@ -1,0 +1,116 @@
+::-webkit-scrollbar-corner {
+    background: #0000007f
+}
+
+/* Track */
+::-webkit-scrollbar {
+    width: 16px;
+    height: 16px;
+    background-color: #0000007f; /*!!!!!*/
+}
+
+::-webkit-scrollbar-track {
+    background: #afafaf5f;
+}
+
+
+/* Thumb */
+::-webkit-scrollbar-thumb {
+    background: #7f7f7faf;
+    border: solid 2px #afafaf7f;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #8f8f8faf;
+}
+
+::-webkit-scrollbar-thumb:active {
+    background: #afafafaf;
+    padding: 2px;
+}
+
+
+/* Buttons */
+::-webkit-scrollbar-button {
+    border-style: solid;
+    height: 16px;
+    width: 16px;
+}
+
+
+/* Up */
+::-webkit-scrollbar-button:vertical:decrement {
+    background-color: #afafaf5f;
+    border-width: 0;
+    background-position: center 4px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(32, 32, 32, 192)'><polygon points='10,2 6,6 14,6'/></svg>");
+
+}
+
+::-webkit-scrollbar-button:vertical:decrement:hover {
+    background-color: #8f8f8f5f;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(32, 32, 32, 192)'><polygon points='10,2 6,6 14,6'/></svg>");
+}
+
+::-webkit-scrollbar-button:vertical:decrement:active {
+    background-color: #2f2f2f9f;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(240, 240, 240, 192)'><polygon points='10,2 6,6 14,6'/></svg>");
+}
+
+
+/* Down */
+::-webkit-scrollbar-button:vertical:increment {
+    background-color: #afafaf5f;
+    border-width: 0;
+    background-position: center 4px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(32, 32, 32, 192)'><polygon points='10,6 6,2 14,2'/></svg>");
+
+}
+
+::-webkit-scrollbar-button:vertical:increment:hover {
+    background-color: #8f8f8f5f;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(32, 32, 32, 192)'><polygon points='10,6 6,2 14,2'/></svg>");
+}
+
+::-webkit-scrollbar-button:vertical:increment:active {
+    background-color: #2f2f2f9f;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(240, 240, 240, 192)'><polygon points='10,6 6,2 14,2'/></svg>");
+}
+
+
+/* Left */
+::-webkit-scrollbar-button:horizontal:decrement {
+    background-color: #afafaf5f;
+    border-width: 0;
+    background-position: center 4px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(32, 32, 32, 192)'><polygon points='8,4 12,0 12,8'/></svg>");
+}
+
+::-webkit-scrollbar-button:horizontal:decrement:hover {
+    background-color: #8f8f8f5f;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(32, 32, 32, 192)'><polygon points='8,4 12,0 12,8'/></svg>");
+}
+
+::-webkit-scrollbar-button:horizontal:decrement:active {
+    background-color: #2f2f2f9f;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(240, 240, 240, 192)'><polygon points='8,4 12,0 12,8'/></svg>");
+}
+
+
+/* Right */
+::-webkit-scrollbar-button:horizontal:increment {
+    background-color: #afafaf5f;
+    border-width: 0;
+    background-position: center 4px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(32, 32, 32, 192)'><polygon points='12,4 8,0 8,8'/></svg>");
+}
+
+::-webkit-scrollbar-button:horizontal:increment:hover {
+    background-color: #8f8f8f5f;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(32, 32, 32, 192)'><polygon points='12,4 8,0 8,8'/></svg>");
+}
+
+::-webkit-scrollbar-button:horizontal:increment:active {
+    background-color: #2f2f2f9f;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' fill='rgba(240, 240, 240, 192)'><polygon points='12,4 8,0 8,8'/></svg>");
+}

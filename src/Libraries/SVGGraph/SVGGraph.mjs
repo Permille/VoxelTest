@@ -1,16 +1,50 @@
+import Slider from "../../Interface/Slider/Slider.mjs";
 import HTML from "./index.html";
 import CSS from "./style.css";
+import WeightedSlider from "../../Interface/Slider/WeightedSlider.mjs";
+import {AddEventListener} from "../../Events.mjs";
+import DeferredPromise from "../DeferredPromise.mjs";
 const NS = "http://www.w3.org/2000/svg";
 export default class SVGGraph{
-  constructor(){
+  constructor(GeneratorFunction){
     [this.Element, this.ID] = HTML("SVGGraph", undefined, true);
     CSS("SVGGraph");
+
+    this.GeneratorFunction = GeneratorFunction;
+
     this.Data = [];
 
     this.Graph = this.Element.querySelector(`#${this.ID}-Graph`);
     this.Horizontal = this.Element.querySelector(`#${this.ID}-Horizontal`);
     this.Vertical = this.Element.querySelector(`#${this.ID}-Vertical`);
     this.Wrapper = this.Element.querySelector(`#${this.ID}-Wrapper`);
+    this.SettingsMenu = this.Element.querySelector(`#${this.ID}-SettingsMenu`);
+
+
+    this.UpdateIntervalSlider = new WeightedSlider({"Name": "Update interval", "DefaultValue": 1000, "Weighting": function(x){return Math.floor(((x * 27.63) + 4.) ** 2.);}, "InverseWeighting": function(x){return ((x ** .5) - 4.) / 27.63;}});
+    this.SettingsMenu.appendChild(this.UpdateIntervalSlider.Element);
+    this.RenderIntervalSlider = new WeightedSlider({"Name": "Render interval", "DefaultValue": 16, "Weighting": function(x){return Math.floor(((x * 27.63) + 4.) ** 2.);}, "InverseWeighting": function(x){return ((x ** .5) - 4.) / 27.63;}});
+    this.SettingsMenu.appendChild(this.RenderIntervalSlider.Element);
+    this.HistoryLengthSlider = new WeightedSlider({"Name": "History length", "DefaultValue": 15, "Weighting": function(x){return Math.floor(((x * 3.978) + 1.5) ** 4.);}, "InverseWeighting": function(x){return ((x ** .25) - 1.5) / 3.978;}});
+    this.SettingsMenu.appendChild(this.HistoryLengthSlider.Element);
+    this.MinimumValueSlider = new Slider({"Name": "Minimum value", "MinValue": 0, "MaxValue": 1000, "DefaultValue": 0, "Disabled": true});
+    this.SettingsMenu.appendChild(this.MinimumValueSlider.Element);
+    this.MaximumValueSlider = new Slider({"Name": "Maximum value", "MinValue": 0, "MaxValue": 1000, "DefaultValue": 1000, "Disabled": true});
+    this.SettingsMenu.appendChild(this.MaximumValueSlider.Element);
+
+    this.UpdateInterval = this.RenderInterval = this.HistoryLength = this.MinimumValue = this.MaximumValue = null;
+
+    AddEventListener(this.UpdateIntervalSlider.Events, "Change", () => this.UpdateInterval = this.UpdateIntervalSlider.GetValue());
+    AddEventListener(this.RenderIntervalSlider.Events, "Change", () => this.RenderInterval = this.RenderIntervalSlider.GetValue());
+    AddEventListener(this.HistoryLengthSlider.Events, "Change", () => this.HistoryLength = this.HistoryLengthSlider.GetValue() * 1000.);
+    AddEventListener(this.MinimumValueSlider.Events, "Change", () => this.MinimumValue = this.MinimumValueSlider.Disabled ? null : this.MinimumValueSlider.GetValue());
+    AddEventListener(this.MaximumValueSlider.Events, "Change", () => this.MaximumValue = this.MaximumValueSlider.Disabled ? null : this.MaximumValueSlider.GetValue());
+
+    this.UpdateIntervalSlider.Initialise();
+    this.RenderIntervalSlider.Initialise();
+    this.HistoryLengthSlider.Initialise();
+    this.MinimumValueSlider.Initialise();
+    this.MaximumValueSlider.Initialise();
 
     this.GraphSegments = [];
     this.HorizontalSegments = [];
@@ -30,8 +64,19 @@ export default class SVGGraph{
 
     this.ValidXDivisions = [1, 2, 5, 10, 20, 30, 60, 90, 120, 300, 600, 900, 1800, 3600];
 
-    this.TimeScale = 10000;
     this.Render();
+
+    void async function Update(){
+      while(true){
+        await new DeferredPromise({"Timeout": this.UpdateInterval, "Throw": false});
+        this.AddDataPoint(this.GeneratorFunction());
+      }
+    }.call(this);
+    void function Render(){
+      if(this.RenderInterval <= 20) window.requestAnimationFrame(Render.bind(this));
+      else window.setTimeout(Render.bind(this), this.RenderInterval);
+      this.Render();
+    }.call(this);
   }
   AddDataPoint(DataPoint){
     this.Data.push([Date.now(), DataPoint]);
@@ -116,7 +161,7 @@ export default class SVGGraph{
     const PossibleValues = [1, 2, 5, 10];
     const Logged = RoughStep / (10 ** Math.floor(Math.log10(RoughStep)));
     for (let i = 0; i < PossibleValues.length; ++i) {
-      if (PossibleValues[i] < Logged && PossibleValues[i + 1] > Logged) {
+      if (PossibleValues[i] < Logged && PossibleValues[i + 1] >= Logged) {
         if (Math.abs(PossibleValues[i] - Logged) < Math.abs(PossibleValues[i + 1] - Logged)) {
           return PossibleValues[i] * 10 ** Math.floor(Math.log10(RoughStep));
         } else return PossibleValues[i + 1] * 10 ** Math.floor(Math.log10(RoughStep));
@@ -129,10 +174,10 @@ export default class SVGGraph{
 
     const Logged = RoughStep / 1000.;
     for (let i = 0; i < this.ValidXDivisions.length - 1; ++i) {
-      if (this.ValidXDivisions[i] < Logged && this.ValidXDivisions[i + 1] > Logged) {
+      if (this.ValidXDivisions[i] < Logged && this.ValidXDivisions[i + 1] >= Logged) {
         if (Math.abs(this.ValidXDivisions[i] - Logged) < Math.abs(this.ValidXDivisions[i + 1] - Logged)) {
-          return this.ValidXDivisions[i] * 10 ** Math.floor(Math.log10(RoughStep));
-        } else return this.ValidXDivisions[i + 1] * 10 ** Math.floor(Math.log10(RoughStep));
+          return this.ValidXDivisions[i] * 1000;
+        } else return this.ValidXDivisions[i + 1] * 1000;
       }
     }
     return RoughStep;
@@ -140,17 +185,19 @@ export default class SVGGraph{
   Render(){
     if(!this.IsVisible) return;
     const Now = Date.now();
-    let MinValue = Infinity;
-    let MaxValue = -Infinity;
-    for(let i = 0; i < this.Data.length; ++i){
-      if(this.Data[i][0] < Now - this.TimeScale && (i === this.Data.length - 1 || this.Data[i + 1][0] < Now - this.TimeScale)){
-        this.Data.shift();
-        i--;
-        continue;
+    let MinValue = this.MinimumValue === null ? Infinity : this.MinimumValue;
+    let MaxValue = this.MaximumValue === null ? -Infinity : this.MaximumValue;
+    if(this.MinimumValue === null || this.MaximumValue === null){
+      for(let i = 0; i < this.Data.length; ++i){
+        if(this.Data[i][0] < Now - this.HistoryLength && (i === this.Data.length - 1 || this.Data[i + 1][0] < Now - this.HistoryLength)){
+          this.Data.shift();
+          i--;
+          continue;
+        }
+        if(Number.isNaN(this.Data[i][1])) continue;
+        if(this.MinimumValue === null) MinValue = Math.min(MinValue, this.Data[i][1]);
+        if(this.MaximumValue === null) MaxValue = Math.max(MaxValue, this.Data[i][1]);
       }
-      if(Number.isNaN(this.Data[i][1])) continue;
-      MinValue = Math.min(MinValue, this.Data[i][1]);
-      MaxValue = Math.max(MaxValue, this.Data[i][1]);
     }
     if(MaxValue < MinValue){
       //Display some warning about there being no data
@@ -189,11 +236,11 @@ export default class SVGGraph{
 
 
 
-    const XRange = this.TimeScale;
+    const XRange = this.HistoryLength;
     const XStep = this.GetXStep(XRange);
     let VerticalLines = 0;
-    for(let i = 0, CurrentX = Math.floor((Now - this.TimeScale) / XStep) * XStep; i < 20; ++i, CurrentX += XStep){
-      if(CurrentX < Now - this.TimeScale) continue;
+    for(let i = 0, CurrentX = Math.floor((Now - this.HistoryLength) / XStep) * XStep; i < 20; ++i, CurrentX += XStep){
+      if(CurrentX < Now - this.HistoryLength) continue;
       if(CurrentX > Now) break;
       const XPosition = (1. - ((Now - CurrentX) / XRange)) * GraphWidth;
       if(XPosition < 10. || XPosition > GraphWidth - 10.) continue;
@@ -232,13 +279,13 @@ export default class SVGGraph{
         if(i === Start) PathString += "M";
         else PathString += " L";
         PathString += ` ${
-          (1 - (Now - this.Data[i][0]) / this.TimeScale) * GraphWidth
+          (1 - (Now - this.Data[i][0]) / this.HistoryLength) * GraphWidth
         } ${
           200 - (this.Data[i][1] - MinValue) / (MaxValue - MinValue) * 200
         }`;
       }
       StrokeElement.setAttributeNS(null, "d", PathString);
-      PathString += ` L ${(1 - (Now - this.Data[End][0]) / this.TimeScale) * GraphWidth} ${ZeroHeight} L ${(1 - (Now - this.Data[Start][0]) / this.TimeScale) * GraphWidth} ${ZeroHeight} Z`;
+      PathString += ` L ${(1 - (Now - this.Data[End][0]) / this.HistoryLength) * GraphWidth} ${ZeroHeight} L ${(1 - (Now - this.Data[Start][0]) / this.HistoryLength) * GraphWidth} ${ZeroHeight} Z`;
       FillElement.setAttributeNS(null, "d", PathString);
     }
     if(SegmentID < this.GraphSegments.length) for(const [FillElement, StrokeElement] of this.GraphSegments.splice(SegmentID)) this.Graph.removeChild(FillElement), this.Graph.removeChild(StrokeElement);

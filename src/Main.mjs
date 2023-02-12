@@ -1,5 +1,6 @@
 import "./index.html?copy";
 import "./Escape.ttf?copy";
+import "./GlobalStyle/GlobalStyle.mjs";
 import MemoryManager from "./MemoryManager.mjs";
 import * as M from "./Constants/Memory.mjs";
 import * as W from "./Constants/Worker.mjs";

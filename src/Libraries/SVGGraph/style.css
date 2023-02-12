@@ -5,25 +5,15 @@
     position: relative;
 }
 
-.CLASS-WrapperElement h1,
-.CLASS-WrapperElement h2,
-.CLASS-WrapperElement h3,
-.CLASS-WrapperElement h4,
-.CLASS-WrapperElement h5,
-.CLASS-WrapperElement h6,
-.CLASS-WrapperElement p{
+.CLASS-WrapperElement *{
     font-weight: normal;
     margin-block: 0;
 }
-.CLASS-WrapperElement * + h1,
-.CLASS-WrapperElement * + h2,
-.CLASS-WrapperElement * + h3,
-.CLASS-WrapperElement * + h4,
-.CLASS-WrapperElement * + h5,
-.CLASS-WrapperElement * + h6,
-.CLASS-WrapperElement * + p{
-    margin-block: .25em;
+.CLASS-SettingsMenu > * + *{
+    margin-top: 4px;
 }
+
+
 .CLASS-WrapperElement ins{
     text-decoration: none;
     transition: color 1s ease-out;
@@ -36,6 +26,8 @@
 .CLASS-WrapperElement ins[data-unit]::after{
     content: attr(data-unit);
 }
+
+
 .CLASS-WrapperElement h1{
     font-size: 24px;
     line-height: 32px;
@@ -85,6 +77,8 @@
     padding: 8px;
     box-sizing: border-box;
     font-size: 24px;
+    max-height: 100%;
+    overflow: auto;
 }
 .CLASS-SettingsImage:hover + div > .CLASS-SettingsMenu,
 .CLASS-SettingsMenu:hover{
@@ -92,75 +86,8 @@
     opacity: 1;
 }
 
-.CLASS-SettingsMenu > form{
-    display: flex;
-    padding: 5px;
-}
-.CLASS-SettingsMenu > form:hover{
-    backdrop-filter: brightness(.8);
-}
-.CLASS-SettingsMenu > form > p{
-    flex-grow: 0;
-    width: fit-content;
-    margin-bottom: 0;
-    margin-right: auto;
-    line-height: 32px;
-    font-size: 24px;
-}
-.CLASS-SettingsMenu > form > .CLASS-Slider{
-    width: 100px;
-    max-width: 150px;
-    flex-grow: 1;
-    margin-right: 5px;
-}
-.CLASS-SettingsMenu > form > .CLASS-Slider::-webkit-slider-thumb{
-    background-color: var(--opaque);
-}
-.CLASS-SettingsMenu > form > .CLASS-TextInput{
-    width: 40px;
-    max-width: 60px;
-    flex-grow: 1;
-    background-color: var(--transparent);
-    border: 3px solid var(--less-transparent);
-}
 
-.CLASS-WrapperElement input{
-    border: 0;
-    outline: 0;
-}
 
-.CLASS-Slider{
-    -webkit-appearance: none;
-    appearance: none;
-    width: 200px;
-    height: 10px;
-    margin-block: 11px;
-
-    background-color: #cfcfcf7f;
-    outline: none;
-}
-.CLASS-Slider::-webkit-slider-thumb{
-    -webkit-appearance: none;
-    appearance: none;
-    width: 10px;
-    height: 32px;
-    background-color: #007fcfff;
-    cursor: e-resize;
-}
-
-.CLASS-TextInput{
-    font-size: 24px;
-    font-family: Escape;
-    background-color: #007faf9f;
-    color: #ffffff;
-    border-color: #007faf7f;
-    border-width: 3px;
-    border-style: solid;
-    box-sizing: border-box;
-}
-.CLASS-TextInput::-webkit-outer-spin-button,
-.CLASS-TextInput::-webkit-inner-spin-button{
-    -webkit-appearance: none;
-    appearance: none;
-    margin: 0;
+.CLASS-SettingsHeader, .CLASS-SettingsExplainer{
+    text-align: center;
 }

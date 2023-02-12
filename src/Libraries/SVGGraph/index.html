@@ -1,29 +1,11 @@
 <div class="WrapperElement" id="WrapperElement" style="--opaque: #007fcfff; --transparent: #007fcf7f; --less-transparent: #007fcf9f">
-  <h1 id="GraphTitle">FPS</h1>
+  <h1 id="GraphTitle">Frames per second</h1>
   <div class="SettingsImage"></div>
   <div class="SettingsAndGraphWrapper">
     <p><ins id="CurrentValue" data-unit=" fps">60</ins></p>
-    <div class="SettingsMenu">
-      <form>
-        <p>Update frequency</p>
-        <input class="Slider" type="range" name="Range" min="0" max="8" value="0" oninput="this.form.Input.value = this.value || 0;" step="1" />
-        <input class="TextInput" type="number" name="Input" value="0" oninput="this.form.Range.value = this.value || 0;" step="any" />
-      </form>
-      <form>
-        <p>History length</p>
-        <input class="Slider" type="range" name="Range" min="0" max="8" value="0" oninput="this.form.Input.value = this.value || 0;" step="1" />
-        <input class="TextInput" type="number" name="Input" value="0" oninput="this.form.Range.value = this.value || 0;" step="any" />
-      </form>
-      <form>
-        <p>Max value</p>
-        <input class="Slider" type="range" name="Range" min="0" max="8" value="0" oninput="this.form.Input.value = this.value || 0;" step="1" />
-        <input class="TextInput" type="number" name="Input" value="0" oninput="this.form.Range.value = this.value || 0;" step="any" />
-      </form>
-      <form>
-        <p>Min value</p>
-        <input class="Slider" type="range" name="Range" min="0" max="8" value="0" oninput="this.form.Input.value = this.value || 0;" step="1" />
-        <input class="TextInput" type="number" name="Input" value="0" oninput="this.form.Range.value = this.value || 0;" step="any" />
-      </form>
+    <div class="SettingsMenu" id="SettingsMenu">
+      <h1 class="SettingsHeader">Graph settings</h1>
+      <p class="SettingsExplainer">Right-clicking a row will toggle it between the default/global settings and graph-specific changes. If you are unable to tweak a setting, make sure the row isn't grayed out - this would mean that the row is using global settings. </p>
     </div>
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 450 220">
       <defs>
