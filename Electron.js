@@ -22,7 +22,7 @@ class Main{
     return Window;
   }
   Build(){
-    const Process = ChildProcess.exec("npm run build");
+    const Process = ChildProcess.exec("npm run build-dev");
     console.log("Started webpack build");
     Process.stdout.on("data", function(Data){
       console.log(`Info: ${Data}`);

@@ -1,8 +1,6 @@
 const path = require("path");
 
 module.exports = {
-  "watch": true,
-  "mode": "development",
   "entry": "./src/Main.mjs",
   "target": "web",
   "output": {
