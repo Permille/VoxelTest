@@ -12,6 +12,8 @@ import {AddEventListener} from "./Events.mjs";
 import DebugInfo from "./DebugInfo/DebugInfo.mjs";
 import DeferredPromise from "./Libraries/DeferredPromise.mjs";
 import Inspector from "./Inspector/Inspector.mjs";
+import {LOAD_REGIONS} from "./Constants/Worker.mjs";
+import {I_LOADED_VOLUME_BOUNDS_START} from "./Constants/Memory.mjs";
 
 class Main{
   constructor(){
@@ -53,11 +55,18 @@ class Main{
       this.Workers.push(iWorker);
     }
 
-    for(let z = 0; z < 31; ++z) for(let x = 0; x < 31; ++x){
-      this.Workers[(z * 31 + x) & 3].postMessage({
-        "Request": W.LOAD_REGION,
-        "x128": x,
-        "z128": z
+    //Set loaded region
+    this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MIN_X)] = 0;
+    this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MIN_Y)] = 0;
+    this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MIN_Z)] = 0;
+    this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MAX_X)] = 31;
+    this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MAX_Y)] = 31;
+    this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MAX_Z)] = 31;
+
+    //Send message to workers
+    for(let i = 0; i < 4; ++i){
+      this.Workers[i].postMessage({
+        "Request": W.LOAD_REGIONS
       });
     }
 

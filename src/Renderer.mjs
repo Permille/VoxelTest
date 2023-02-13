@@ -234,11 +234,11 @@ export default class Renderer{
       const Offset = this.Memory.u32[M.I_WORLD_GRID_INDEX] + (Level << 15);
       for(let z = 0; z < 32; ++z) for(let y = 0; y < 32; ++y) for(let x = 0; x < 32; ++x){
         if(UploadCounter > 1) break Outer;
-        if(((this.Memory.u32[M.I_FULLY_UPLOADED_BITMAP_START + (Level << 10 | z << 5 | y)] >> x) & 1) === 1) continue; //Something else should handle setting this to unuploaded (e.g. in the event that the world offset moves)
+        const Mask = Atomics.load(this.Memory.u32, this.Memory.u32[M.I_WORLD_GRID_INFO_INDEX] + (Level << 13 | z << 8 | y << 3 | x >> 2)) >> ((x & 3) << 3);
+        if((Mask & (M.MASK_UPLOADED | M.MASK_UNLOADED | M.MASK_IS_EMPTY)) !== 0 || (Mask & M.MASK_GENERATED) === 0) continue;
         const Region128_SegmentAndStackIndex = this.Memory.u32[Offset | z << 10 | y << 5 | x];
         if(Region128_SegmentAndStackIndex === 0){
-          //TODO: I should set it to fully uploaded, but only if I'm sure that I have finished generating the region.
-          //this.Memory.u32[M.I_FULLY_UPLOADED_BITMAP_START + (Level << 10 | z << 5 | y)] |= 1 << x;
+          console.warn("This shouldn't have happened");
           continue;
         }
         Atomics.add(this.Memory.u32, (Region128_SegmentAndStackIndex & ~65535) | M.I_USAGE_COUNTER, 1);
@@ -266,7 +266,7 @@ export default class Renderer{
             Atomics.store(this.Memory.u32, (ChildSegmentAndStackIndex & ~65535) | M.I_NEEDS_GPU_UPLOAD, 0);
           }
         }
-        this.Memory.u32[M.I_FULLY_UPLOADED_BITMAP_START + (Level << 10 | z << 5 | y)] |= 1 << x;
+        Atomics.or(this.Memory.u32, this.Memory.u32[M.I_WORLD_GRID_INFO_INDEX] + (Level << 13 | z << 8 | y << 3 | x >> 2), M.MASK_UPLOADED << ((x & 3) << 3));
 
         Atomics.sub(this.Memory.u32, (Region128_SegmentAndStackIndex & ~65535) | M.I_USAGE_COUNTER, 1);
       }

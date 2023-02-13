@@ -14,11 +14,16 @@ export const I_WORLD_GRID_INFO_INDEX = 9;
 
 export const I_INFO_LOADED_CUBES_COUNTER = 16;
 
+export const I_LOADED_VOLUME_BOUNDS_START = 32;
+export const MIN_X = 0;
+export const MIN_Y = 1;
+export const MIN_Z = 2;
+export const MAX_X = 4;
+export const MAX_Y = 5;
+export const MAX_Z = 6;
+
 export const I_HEIGHT_DATA_INFO_USAGE_COUNTER = 0;
 export const I_HEIGHT_DATA_INFO_MANAGEMENT_LOCK = 1;
-
-export const I_FULLY_UPLOADED_BITMAP_START = 49152;
-export const I_LOD_LEVEL_OFFSETS_START = 49088;
 
 export const I_HEAP = 65535;
 export const I_STACK = 65534;
@@ -29,3 +34,9 @@ export const I_MANAGEMENT_LOCK = 65531; // This lock is used for memory defragme
 export const I_ALLOCATION_LOCK = 65530; // This lock is used for allocation, but shouldn't be used for deallocation which doesn't need any locks.
 export const I_USAGE_COUNTER = 65529;
 export const I_NEEDS_GPU_UPLOAD = 65528;
+
+export const MASK_GENERATING = 1;
+export const MASK_GENERATED = 2;
+export const MASK_UPLOADED = 4;
+export const MASK_UNLOADED = 8;
+export const MASK_IS_EMPTY = 16;
