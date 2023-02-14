@@ -6,7 +6,7 @@
   "scripts": {
     "build-production": "npx webpack --config webpack.production.js",
     "build-dev": "npx webpack --config webpack.development.js",
-    "dev": ".\\node_modules\\.bin\\electron Electron.js --js-flags=\"--expose-gc\" --expose-gc --disable-site-isolation-trials --disable-web-security --user-data-dir=\"C:\\Temp\" --enable-features=SharedArrayBuffer",
+    "dev": ".\\node_modules\\.bin\\electron Electron.js --js-flags=\"--expose-gc\" --user-data-dir=\"C:\\Temp\"",
     "fps": ".\\node_modules\\.bin\\electron Electron.js --js-flags=\"--expose-gc\" --expose-gc --disable-site-isolation-trials --disable-web-security --user-data-dir=\"C:\\Temp\" --enable-features=SharedArrayBuffer --disable-frame-rate-limit"
   },
   "repository": {

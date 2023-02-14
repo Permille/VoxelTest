@@ -11,9 +11,11 @@ for(let z = 0; z < 256; ++z) for(let x = 0; x < 256; ++x){
   Heights[z << 8 | x] = GetHeight(x * 16, z * 16);
 }
 
-const InterpolatedHeights = new Float32Array(18 * 18);
-const Min4s = new Float32Array(16);
-const Max4s = new Float32Array(16);
+const InterpolatedHeights = new Int32Array(32 * 32);
+const Min4s = new Int32Array(16);
+const Max4s = new Int32Array(16);
+const GroundTypes = new Uint32Array([2, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]);
+const EmptyCube = new Uint32Array(4096);
 
 self.Times = new Float64Array(32 * 32);
 
@@ -90,36 +92,36 @@ class WorkerMain{
 
 
         for(let z = 0; z < 9; ++z) for(let x = 0; x < 9; ++x){
-          InterpolatedHeights[z * 18 + x] = (
+          InterpolatedHeights[z << 5 | x] = Math.floor((
             HeightMM * (16. - (x + 7)) * (16. - (z + 7)) +
             HeightM0 * (x + 7) * (16. - (z + 7)) +
             Height0M * (16. - (x + 7)) * (z + 7) +
             Height00 * (x + 7) * (z + 7)
-          ) / 256.;
+          ) / 256.);
 
 
-          InterpolatedHeights[z * 18 + (x + 9)] = (
+          InterpolatedHeights[z << 5 | (x + 9)] = Math.floor((
             HeightM0 * (16. - x) * (16. - (z + 7)) +
             HeightMP * x * (16. - (z + 7)) +
             Height00 * (16. - x) * (z + 7) +
             Height0P * x * (z + 7)
-          ) / 256.;
+          ) / 256.);
 
 
-          InterpolatedHeights[(z + 9) * 18 + x] = (
+          InterpolatedHeights[(z + 9) << 5 | x] = Math.floor((
             Height0M * (16. - (x + 7)) * (16. - z) +
             Height00 * (x + 7) * (16. - z) +
             HeightPM * (16. - (x + 7)) * z +
             HeightP0 * (x + 7) * z
-          ) / 256.;
+          ) / 256.);
 
 
-          InterpolatedHeights[(z + 9) * 18 + (x + 9)] = (
+          InterpolatedHeights[(z + 9) << 5 | (x + 9)] = Math.floor((
             Height00 * (16. - x) * (16. - z) +
             Height0P * x * (16. - z) +
             HeightP0 * (16. - x) * z +
             HeightPP * x * z
-          ) / 256.;
+          ) / 256.);
         }
 
 
@@ -130,12 +132,12 @@ class WorkerMain{
         Max4s.fill(-2147483648);
 
         for(let z4 = 0; z4 < 4; ++z4) for(let x4 = 0; x4 < 4; ++x4){
-          const Offset = (z4 * 4) * 18 + (x4 * 4);
+          const Offset = z4 << 7 | x4 << 2;
           let Min = 2147483647;
           let Max = -2147483648;
           for(let z1 = 0; z1 < 6; ++z1) for(let x1 = 0; x1 < 6; x1 += 2){
-            let Large = InterpolatedHeights[Offset + z1 * 18 + x1];
-            let Small = InterpolatedHeights[Offset + z1 * 18 + x1 + 1];
+            let Large = InterpolatedHeights[Offset + (z1 << 5 | x1)];
+            let Small = InterpolatedHeights[Offset + (z1 << 5 | x1 | 1)];
             if(Large < Small){
               const Temp = Large;
               Large = Small;
@@ -164,6 +166,7 @@ class WorkerMain{
           }
           FreeCubeIndex++;
           const CubeHeapIndex = (CubeSegmentAndStackIndex & ~65535) | this.u32[CubeSegmentAndStackIndex];
+          this.u32.set(EmptyCube, CubeHeapIndex + 2);
 
           for(let i = 0; i < 16; ++i){
             this.u32[CubeHeapIndex + 4098 + i] = Min4s[i];
@@ -174,14 +177,13 @@ class WorkerMain{
           this.u32[Children128HeapIndex + 2 + (z16 << 6 | y16 << 3 | x16)] = CubeSegmentAndStackIndex;
           NonEmptyChildrenCount++;
 
-          for(let z1 = 0; z1 < 16; ++z1) for(let y1 = 0; y1 < 16; ++y1) for(let x1 = 0; x1 < 16; ++x1){
-            let HeightDifference = InterpolatedHeights[(z1 + 1) * 18 + (x1 + 1)] - (y128 << 7 | y16 << 4 | y1);
-            let Type;
-            if(HeightDifference < 0) Type = 0;
-            else if(HeightDifference < 1) Type = 2;
-            else if(HeightDifference < 2) Type = 1;
-            else Type = 3;
-            this.u32[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | x1)] = Type; //This gets the type
+          for(let z1 = 0; z1 < 16; ++z1) for(let x1 = 0; x1 < 16; ++x1){
+            const MapHeight = InterpolatedHeights[(z1 + 1) << 5 | (x1 + 1)] - (y128 << 7 | y16 << 4);
+            for(let y1 = 0, y1Max = Math.min(MapHeight + 1, 16); y1 < y1Max; ++y1){
+              const HeightDifference = MapHeight - y1;
+              const Type = GroundTypes[HeightDifference > 15 ? 15 : HeightDifference];
+              this.u32[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | x1)] = Type; //This gets the type
+            }
           }
         }
       }
@@ -304,44 +306,39 @@ class WorkerMain{
       let L3Bitmap16 = 0;
 
       for(let y4 = MinY16 >> 1; y4 <= (MaxY16 >> 1); ++y4) for(let z4 = MinZ16 >> 2; z4 <= (MaxZ16 >> 2); ++z4) for(let x4 = MinX16 >> 2; x4 <= (MaxX16 >> 2); ++x4){
-        /*let Bitmap4 = 0;
-        for(let y1 = 0; y1 < 2; ++y1) for(let z1 = 0; z1 < 4; ++z1) for(let x1 = 0; x1 < 4; ++x1){
-          if(CubeHeapArrayView[z4 << 10 | z1 << 8 | y4 << 5 | y1 << 4 | x4 << 2 | x1] !== 0) Bitmap4 |= 1 << (y1 << 4 | z1 << 2 | x1);
-        }*/
-        const Offset = z4 << 10 | y4 << 5 | x4 << 2;
-        const Bitmap4 = (this.u32[CubeHeapIndex + 2 + (Offset | 0x000)] && 1)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x001)] && 2)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x002)] && 4)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x003)] && 8)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x100)] && 16)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x101)] && 32)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x102)] && 64)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x103)] && 128)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x200)] && 256)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x201)] && 512)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x202)] && 1024)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x203)] && 2048)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x300)] && 4096)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x301)] && 8192)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x302)] && 16384)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x303)] && 32768)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x010)] && 65536)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x011)] && 131072)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x012)] && 262144)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x013)] && 524288)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x110)] && 1048576)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x111)] && 2097152)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x112)] && 4194304)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x113)] && 8388608)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x210)] && 16777216)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x211)] && 33554432)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x212)] && 67108864)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x213)] && 134217728)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x310)] && 268435456)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x311)] && 536870912)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x312)] && 1073741824)
-          | (this.u32[CubeHeapIndex + 2 + (Offset | 0x313)] && 2147483648);
-
+        const Offset = CubeHeapIndex + 2 + (z4 << 10 | y4 << 5 | x4 << 2);
+        const Bitmap4 = (this.u32[Offset] && 1)
+          | (this.u32[Offset + 0x001] && 2)
+          | (this.u32[Offset + 0x002] && 4)
+          | (this.u32[Offset + 0x003] && 8)
+          | (this.u32[Offset + 0x100] && 16)
+          | (this.u32[Offset + 0x101] && 32)
+          | (this.u32[Offset + 0x102] && 64)
+          | (this.u32[Offset + 0x103] && 128)
+          | (this.u32[Offset + 0x200] && 256)
+          | (this.u32[Offset + 0x201] && 512)
+          | (this.u32[Offset + 0x202] && 1024)
+          | (this.u32[Offset + 0x203] && 2048)
+          | (this.u32[Offset + 0x300] && 4096)
+          | (this.u32[Offset + 0x301] && 8192)
+          | (this.u32[Offset + 0x302] && 16384)
+          | (this.u32[Offset + 0x303] && 32768)
+          | (this.u32[Offset + 0x010] && 65536)
+          | (this.u32[Offset + 0x011] && 131072)
+          | (this.u32[Offset + 0x012] && 262144)
+          | (this.u32[Offset + 0x013] && 524288)
+          | (this.u32[Offset + 0x110] && 1048576)
+          | (this.u32[Offset + 0x111] && 2097152)
+          | (this.u32[Offset + 0x112] && 4194304)
+          | (this.u32[Offset + 0x113] && 8388608)
+          | (this.u32[Offset + 0x210] && 16777216)
+          | (this.u32[Offset + 0x211] && 33554432)
+          | (this.u32[Offset + 0x212] && 67108864)
+          | (this.u32[Offset + 0x213] && 134217728)
+          | (this.u32[Offset + 0x310] && 268435456)
+          | (this.u32[Offset + 0x311] && 536870912)
+          | (this.u32[Offset + 0x312] && 1073741824)
+          | (this.u32[Offset + 0x313] && 2147483648);
         if(Bitmap4 !== 0){
           this.u32[AllocationTemplateHeapIndex + 8 + TotalAllocations] = Bitmap4;
           TotalAllocations++;
@@ -386,33 +383,45 @@ class WorkerMain{
       // RLE_7: 4413594, 917 fps, 2492 ms (three types)
       for(let y1 = MinY16; y1 <= MaxY16; ++y1){
         let CurrentType = this.u32[CubeHeapIndex + 2 + (y1 << 4)]; //Get voxel at 0, y1, 0
-        let RunEnd = 0;
         let LayerItems = 0;
-        for(let z1 = 0; z1 < 16; ++z1) for(let x1 = 0; x1 < 16; ++x1){
-          const Type = this.u32[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | x1)];
-          if(Type !== 0 && (
-            x1 === 0 || x1 === 15 || y1 === 0 || y1 === 15 || z1 === 0 || z1 === 15 ||
-            this.u32[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | (x1 - 1))] === 0 ||
-            this.u32[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | (x1 + 1))] === 0 ||
-            this.u32[CubeHeapIndex + 2 + (z1 << 8 | (y1 - 1) << 4 | x1)] === 0 ||
-            this.u32[CubeHeapIndex + 2 + (z1 << 8 | (y1 + 1) << 4 | x1)] === 0 ||
-            this.u32[CubeHeapIndex + 2 + ((z1 - 1) << 8 | y1 << 4 | x1)] === 0 ||
-            this.u32[CubeHeapIndex + 2 + ((z1 + 1) << 8 | y1 << 4 | x1)] === 0
-          )){
-            if(CurrentType === 0) CurrentType = Type;
-            if((LayerItems === 0 || CurrentType !== Type)) this.TypesSet.Add(Type);
-            if(CurrentType !== Type){
-              this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | LayerItems << 1 | 0)] = CurrentType;
-              this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | LayerItems << 1 | 1)] = RunEnd - 1; //-1 is so that it's in the range [0, 255] instead of [1, 256]
-              LayerItems++;
-              CurrentType = Type;
+        let CurrentBitmap = (y1 < 8 ? y1 < 4 ? L0Bitmap16 : L1Bitmap16 : y1 < 12 ? L2Bitmap16 : L3Bitmap16) >> ((y1 & 2) << 3); //Shifts by 16 if y1 % 4 >= 2.
+        for(let z4 = 0; z4 < 4; ++z4, CurrentBitmap >>= 4){
+          if((CurrentBitmap & 15) === 0){
+            continue;
+          }
+          for(let z1 = 0; z1 < 4; ++z1){
+            const Offset = CubeHeapIndex + 2 + (z4 << 10 | z1 << 8 | y1 << 4);
+            for(let x4 = 0; x4 < 4; ++x4){
+              if((CurrentBitmap & (1 << x4)) === 0){
+                continue;
+              }
+              for(let x1 = 0; x1 < 4; ++x1){
+                const Type = this.u32[Offset + (x4 << 2 | x1)];
+                if(Type !== 0/* && ( //This can reduce memory usage by not taking into account the types of occluded voxels. It only works when I'm not skipping parts (like where I'm checking against the bitmap)
+                  x1 === 0 || x1 === 15 || y1 === 0 || y1 === 15 || z1 === 0 || z1 === 15 ||
+                  this.u32[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | (x1 - 1))] === 0 ||
+                  this.u32[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | (x1 + 1))] === 0 ||
+                  this.u32[CubeHeapIndex + 2 + (z1 << 8 | (y1 - 1) << 4 | x1)] === 0 ||
+                  this.u32[CubeHeapIndex + 2 + (z1 << 8 | (y1 + 1) << 4 | x1)] === 0 ||
+                  this.u32[CubeHeapIndex + 2 + ((z1 - 1) << 8 | y1 << 4 | x1)] === 0 ||
+                  this.u32[CubeHeapIndex + 2 + ((z1 + 1) << 8 | y1 << 4 | x1)] === 0*/
+                ){
+                  if(CurrentType === 0) CurrentType = Type;
+                  if((LayerItems === 0 || CurrentType !== Type)) this.TypesSet.Add(Type);
+                  if(CurrentType !== Type){
+                    this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | LayerItems << 1 | 0)] = CurrentType;
+                    this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | LayerItems << 1 | 1)] = (z4 << 6 | z1 << 4 | x4 << 2 | x1) - 1; //-1 is so that it's in the range [0, 255] instead of [1, 256]
+                    LayerItems++;
+                    CurrentType = Type;
+                  }
+                }
+              }
             }
           }
-          RunEnd++;
         }
         if(CurrentType !== 0){
           this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | LayerItems << 1 | 0)] = CurrentType;
-          this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | LayerItems << 1 | 1)] = RunEnd - 1; //-1 is so that it's in the range [0, 255] instead of [1, 256]
+          this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | LayerItems << 1 | 1)] = 255; //-1 is so that it's in the range [0, 255] instead of [1, 256]
           LayerItems++;
         }
         this.u32[TempRLEHeapIndex + 2 + (8192 | y1)] = LayerItems; //Will be 0 if this column was just air
