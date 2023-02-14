@@ -18,7 +18,8 @@ module.exports = {
   "resolveLoader":{
     "alias":{
       "TemplateCSSLoader": path.resolve(__dirname, "TemplateCSSLoader.js"),
-      "TemplateHTMLLoader": path.resolve(__dirname, "TemplateHTMLLoader.js")
+      "TemplateHTMLLoader": path.resolve(__dirname, "TemplateHTMLLoader.js"),
+      "WatCompilerLoader": path.resolve(__dirname, "WatCompilerLoader.js")
     }
   },
   "module":{
@@ -38,6 +39,10 @@ module.exports = {
       {
         "test": /\.(html|xhtml)$/i,
         "use": ["TemplateHTMLLoader"]
+      },
+      {
+        "test": /\.wat$/i,
+        "use": ["WatCompilerLoader"]
       },
       {
         "resourceQuery": /file/i,

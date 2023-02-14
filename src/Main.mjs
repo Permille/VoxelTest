@@ -12,6 +12,7 @@ import {AddEventListener} from "./Events.mjs";
 import DebugInfo from "./DebugInfo/DebugInfo.mjs";
 import DeferredPromise from "./Libraries/DeferredPromise.mjs";
 import Inspector from "./Inspector/Inspector.mjs";
+import Test from "./Test.wat";
 import {LOAD_REGIONS} from "./Constants/Worker.mjs";
 import {I_LOADED_VOLUME_BOUNDS_START} from "./Constants/Memory.mjs";
 
@@ -21,6 +22,9 @@ class Main{
     this.MemoryBuffer = new SharedArrayBuffer(this.MemorySize);
     this.Memory = new MemoryManager(this.MemoryBuffer);
     this.Memory.InitialiseMemory();
+
+    this.Test = new WebAssembly.Instance(Test, {});
+    console.log(this.Test);
 
     const Canvas = document.createElement("canvas");
     document.body.appendChild(Canvas);
