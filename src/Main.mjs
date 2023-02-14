@@ -12,19 +12,17 @@ import {AddEventListener} from "./Events.mjs";
 import DebugInfo from "./DebugInfo/DebugInfo.mjs";
 import DeferredPromise from "./Libraries/DeferredPromise.mjs";
 import Inspector from "./Inspector/Inspector.mjs";
-import Test from "./Test.wat";
 import {LOAD_REGIONS} from "./Constants/Worker.mjs";
 import {I_LOADED_VOLUME_BOUNDS_START} from "./Constants/Memory.mjs";
 
 class Main{
   constructor(){
     this.MemorySize = 1 << 28; //256 MB
-    this.MemoryBuffer = new SharedArrayBuffer(this.MemorySize);
+    //this.MemoryBuffer = new SharedArrayBuffer(this.MemorySize);
+    this.WasmMemory = new WebAssembly.Memory({"initial": this.MemorySize >> 16, "maximum": this.MemorySize >> 16, "shared": true});
+    this.MemoryBuffer = this.WasmMemory.buffer;
     this.Memory = new MemoryManager(this.MemoryBuffer);
     this.Memory.InitialiseMemory();
-
-    this.Test = new WebAssembly.Instance(Test, {});
-    console.log(this.Test);
 
     const Canvas = document.createElement("canvas");
     document.body.appendChild(Canvas);
@@ -53,7 +51,7 @@ class Main{
       };
       iWorker.postMessage({
         "Request": W.INITIALISE,
-        "MemoryBuffer": this.MemoryBuffer,
+        "WasmMemory": this.WasmMemory,
         "ID": i
       });
       this.Workers.push(iWorker);

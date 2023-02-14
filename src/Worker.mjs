@@ -4,7 +4,10 @@ import MemoryManager from "./MemoryManager.mjs";
 import IterableSet from "./DataStructures/IterableSet.mjs";
 import GetHeight from "./GetHeight.mjs";
 import {LOAD_REGIONS} from "./Constants/Worker.mjs";
+import WasmBinary from "./Test.wat";
 import {I_INFO_LOADED_CUBES_COUNTER} from "./Constants/Memory.mjs";
+
+const WasmModule = new WebAssembly.Module(WasmBinary);
 
 const Heights = new Float32Array(256 * 256);
 for(let z = 0; z < 256; ++z) for(let x = 0; x < 256; ++x){
@@ -21,7 +24,7 @@ self.Times = new Float64Array(32 * 32);
 
 class WorkerMain{
   constructor(MessageData){
-    this.MemoryBuffer = MessageData.MemoryBuffer;
+    this.MemoryBuffer = MessageData.WasmMemory.buffer;
     this.u32 = new Uint32Array(this.MemoryBuffer);
     this.i32 = new Int32Array(this.MemoryBuffer);
     this.ID = MessageData.ID;
@@ -183,6 +186,7 @@ class WorkerMain{
               const HeightDifference = MapHeight - y1;
               const Type = GroundTypes[HeightDifference > 15 ? 15 : HeightDifference];
               this.u32[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | x1)] = Type; //This gets the type
+              //self.WasmInstance.exports.Write(CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | x1), Type);
             }
           }
         }
@@ -597,9 +601,11 @@ class WorkerMain{
   }
 }
 self.iWorkerMain = null;
+self.WasmInstance = null;
 self.onmessage = function(Event){
   const Data = Event.data;
   if(Data.Request === W.INITIALISE){
+    self.WasmInstance = new WebAssembly.Instance(WasmModule, {"Main": {"MemoryBuffer": Data.WasmMemory}});
     self.iWorkerMain = new WorkerMain(Data);
   } else{
     self.iWorkerMain[Data.Request](Data);
