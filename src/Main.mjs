@@ -38,7 +38,7 @@ class Main{
     this.Inspector = new Inspector;
 
     this.Workers = [];
-    for(let i = 0; i < 4; ++i){
+    for(let i = 0; i < 1; ++i){
       const iWorker = new Worker(new URL("./Worker.mjs", import.meta.url), {"name": "Worker" + i, "type": "module"});
       iWorker.onmessage = function(Event){
         console.log(Event);
@@ -66,7 +66,7 @@ class Main{
     this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MAX_Z)] = 31;
 
     //Send message to workers
-    for(let i = 0; i < 4; ++i){
+    for(let i = 0; i < 1; ++i){
       this.Workers[i].postMessage({
         "Request": W.LOAD_REGIONS
       });
