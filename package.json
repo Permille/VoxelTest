@@ -24,6 +24,7 @@
   "homepage": "https://github.com/Permille/VoxelTest#readme",
   "dependencies": {
     "electron": "^23.0.0",
+    "electron-nightly": "^26.0.0-nightly.20230413",
     "file-loader": "^6.2.0",
     "fs": "^0.0.1-security",
     "gl-matrix": "^3.4.3",
