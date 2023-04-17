@@ -29,7 +29,7 @@ module.exports = {
         "type": "asset/resource"
       },
       {
-        "test": /\.(fsh|vsh|glsl)$/i,
+        "test": /\.(fsh|vsh|glsl|wgsl)$/i,
         "type": "asset/source"
       },
       {

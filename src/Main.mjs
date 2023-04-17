@@ -14,10 +14,11 @@ import DeferredPromise from "./Libraries/DeferredPromise.mjs";
 import Inspector from "./Inspector/Inspector.mjs";
 import {LOAD_REGIONS} from "./Constants/Worker.mjs";
 import {I_LOADED_VOLUME_BOUNDS_START} from "./Constants/Memory.mjs";
+import WebGPURenderer from "./WebGPURenderer.mjs";
 
 class Main{
   constructor(){
-    this.MemorySize = 1 << 28; //256 MB
+    this.MemorySize = 1 << 27; //256 MB
     //this.MemoryBuffer = new SharedArrayBuffer(this.MemorySize);
     this.WasmMemory = new WebAssembly.Memory({"initial": this.MemorySize >> 16, "maximum": this.MemorySize >> 16, "shared": true});
     this.MemoryBuffer = this.WasmMemory.buffer;
@@ -30,12 +31,19 @@ class Main{
     Canvas.style.display = "block";
 
     this.Camera = new Camera;
-    this.Renderer = new Renderer(Canvas, this.Camera, this.Memory);
+    this.Camera.RotationX = 6.37400000000014;//2.4620000000000997;
+    this.Camera.RotationY = -0.06799999999999556;//0.8260000000000052;
+    this.Camera.PositionX = 3.004297586323058;//-12.290499630463401;
+    this.Camera.PositionY = 5.016874999925496;//-10;
+    this.Camera.PositionZ = 34.56299090546896;//-14.414844310476333;
+    //this.Renderer = new Renderer(Canvas, this.Camera, this.Memory);
+    this.Renderer = new WebGPURenderer(Canvas, this.Camera, this.Memory);
+    this.Renderer.Initialise();
     this.KeyboardControls = new KeyboardControls(this.Camera);
     this.MouseControls = new MouseControls(this.Camera, Canvas);
     this.DebugInfo = new DebugInfo;
 
-    this.Inspector = new Inspector;
+    //this.Inspector = new Inspector;
 
     this.Workers = [];
     for(let i = 0; i < 1; ++i){

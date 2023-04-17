@@ -32,7 +32,7 @@ export default class MouseControls{
   HandleMouseMove(Event){
     if(!this.IsPointerLocked) return;
     this.Camera.RotationX += Event.movementX / 1000.;
-    this.Camera.RotationY += Event.movementY / 1000. * (this.InvertY ? 1. : -1.) * this.MouseSensitivity;
+    this.Camera.RotationY += Event.movementY / 1000. * (this.InvertY ? -1. : 1.) * this.MouseSensitivity;
   }
   Destroy(){
     if(this.IsPointerLocked) document.exitPointerLock();
