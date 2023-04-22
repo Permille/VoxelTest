@@ -18,8 +18,7 @@ import WebGPURenderer from "./WebGPURenderer.mjs";
 
 class Main{
   constructor(){
-    this.MemorySize = 1 << 27; //256 MB
-    //this.MemoryBuffer = new SharedArrayBuffer(this.MemorySize);
+    this.MemorySize = 1 << 27;
     this.WasmMemory = new WebAssembly.Memory({"initial": this.MemorySize >> 16, "maximum": this.MemorySize >> 16, "shared": true});
     this.MemoryBuffer = this.WasmMemory.buffer;
     this.Memory = new MemoryManager(this.MemoryBuffer);
@@ -31,17 +30,19 @@ class Main{
     Canvas.style.display = "block";
 
     this.Camera = new Camera;
-    this.Camera.RotationX = 6.37400000000014;//2.4620000000000997;
-    this.Camera.RotationY = -0.06799999999999556;//0.8260000000000052;
-    this.Camera.PositionX = 3.004297586323058;//-12.290499630463401;
-    this.Camera.PositionY = 5.016874999925496;//-10;
-    this.Camera.PositionZ = 34.56299090546896;//-14.414844310476333;
     //this.Renderer = new Renderer(Canvas, this.Camera, this.Memory);
     this.Renderer = new WebGPURenderer(Canvas, this.Camera, this.Memory);
     this.Renderer.Initialise();
     this.KeyboardControls = new KeyboardControls(this.Camera);
     this.MouseControls = new MouseControls(this.Camera, Canvas);
     this.DebugInfo = new DebugInfo;
+
+    this.Camera.RotationX = 8.6109999999999887;//8.619000000000012;
+    this.Camera.RotationY = 1.0640000000000025;//0.5480000000000046;
+    this.Camera.PositionX = 21.158676800640972;//-10.1831588486443;
+    this.Camera.PositionY = 1306.6745001811541;//1110.6695000071086;
+    this.Camera.PositionZ = 29.649728025836264;//-10.6725504788376;
+    this.KeyboardControls.MovementSpeed = 1.;
 
     //this.Inspector = new Inspector;
 
@@ -70,7 +71,7 @@ class Main{
     this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MIN_Y)] = 0;
     this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MIN_Z)] = 0;
     this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MAX_X)] = 31;
-    this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MAX_Y)] = 31;
+    this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MAX_Y)] = 15;
     this.Memory.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MAX_Z)] = 31;
 
     //Send message to workers

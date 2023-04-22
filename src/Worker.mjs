@@ -63,7 +63,7 @@ class WorkerMain{
         MinY = Math.min(MinY, Height);
         MaxY = Math.max(MaxY, Height);
       }
-      for(let y128 = MinY128; y128 <= MaxY128; ++y128){
+      for(let y128 = MinY128; y128 < MaxY128; ++y128){
         if(y128 < Math.floor(MinY / 128) || y128 > Math.floor(MaxY / 128)){
           //Mark region as fully empty
           Atomics.or(this.u32, this.u32[M.I_WORLD_GRID_INFO_INDEX] + (0 << 13 | z128 << 8 | y128 << 3 | x128 >> 2), M.MASK_IS_EMPTY << ((x128 & 3) << 3));
