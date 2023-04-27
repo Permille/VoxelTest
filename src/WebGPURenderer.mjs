@@ -2,7 +2,7 @@ import {mat3, mat4, vec3} from "gl-matrix";
 import * as M from "./Constants/Memory.mjs";
 import {AddEventListener, FireEvent} from "./Events.mjs";
 import MainShader from "./Shaders/WebGPU/Main.wgsl";
-import RasterizationShader from "./Shaders/WebGPU/Compute.wgsl";
+import ComputeShader from "./Shaders/WebGPU/Compute.wgsl";
 import ClearDepthBufferShader from "./Shaders/WebGPU/ClearDepthBuffer.wgsl";
 
 export default class WebGPURenderer{
@@ -17,7 +17,7 @@ export default class WebGPURenderer{
     this.Frames = 0;
     this.Events = new EventTarget;
 
-    this.FOV = 70.;
+    this.FOV = 100.;
     this.Near = 1.;
     this.Far = 2.;
 
@@ -32,13 +32,18 @@ export default class WebGPURenderer{
       this.Adapter = await navigator.gpu.requestAdapter({
         "powerPreference": "high-performance"
       });
-      this.Device = await this.Adapter.requestDevice();
+      this.Device = await this.Adapter.requestDevice({
+        "requiredLimits":{
+          "maxBufferSize": 268435456,
+          "maxStorageBufferBindingSize": 268435456
+        }
+      });
       this.Context = this.Canvas.getContext("webgpu");
     } catch(e){
       throw new Error("WebGPU is not supported");
     }
 
-    console.log(this.Device.limits);
+    console.log(this.Adapter.limits);
 
     this.PresentationFormat = navigator.gpu.getPreferredCanvasFormat();
     this.Context.configure({
@@ -85,7 +90,7 @@ export default class WebGPURenderer{
     this.DepthBuffer = null;
 
 
-    this.RasterizationShaderModule = this.Device.createShaderModule({"code": RasterizationShader});
+    this.ComputeShaderModule = this.Device.createShaderModule({"code": ComputeShader});
     this.RasterizationBindGroupLayout = this.Device.createBindGroupLayout({
       "entries": [
         {
@@ -140,8 +145,8 @@ export default class WebGPURenderer{
         "bindGroupLayouts": [this.RasterizationBindGroupLayout]
       }),
       "compute": {
-        "module": this.RasterizationShaderModule,
-        "entryPoint": "Main",
+        "module": this.ComputeShaderModule,
+        "entryPoint": "RasterizationMain",
         "constants": {
           //"Test": 0
         }
@@ -184,11 +189,6 @@ export default class WebGPURenderer{
         }
       }
     });
-
-
-
-
-
 
 
 
@@ -281,7 +281,7 @@ export default class WebGPURenderer{
 
     if(this.RasterizationOutputTexture !== null) this.RasterizationOutputTexture.destroy();
     this.RasterizationOutputTexture = this.Device.createTexture({
-      "size": [Width, Height, 1],
+      "size": [(Width + 15) & ~15, (Height + 15) & ~15, 1],
       "format": "rgba8unorm",
       "usage": GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
     });
@@ -459,6 +459,7 @@ export default class WebGPURenderer{
     this.UniformDataView.setFloat32(224, RayDirectionHH[0], true);
     this.UniformDataView.setFloat32(228, RayDirectionHH[1], true);
     this.UniformDataView.setFloat32(232, RayDirectionHH[2], true);
+    this.UniformDataView.setFloat32(240, this.FOV, true);
     this.Device.queue.writeBuffer(this.UniformBuffer, 0, this.UniformDataView.buffer, this.UniformDataView.byteOffset, this.UniformDataView.byteLength);
 
 
@@ -493,9 +494,7 @@ export default class WebGPURenderer{
     RasterizationPassEncoder.setPipeline(this.RasterizationPipeline);
     RasterizationPassEncoder.setBindGroup(0, this.RasterizationBindGroup);
 
-    //IMPORTANT: This will not render the last few regions that are at the end.
-    //To do that, add 64 to the RenderInstances.
-    RasterizationPassEncoder.dispatchWorkgroups(this.RenderInstances >> 6, 1, 1);
+    RasterizationPassEncoder.dispatchWorkgroups((this.RenderInstances + 63) >> 6, 1, 1);
     RasterizationPassEncoder.end();
 
     const DrawingPassEncoder = CommandEncoder.beginRenderPass({
@@ -554,6 +553,7 @@ export default class WebGPURenderer{
       const Y = (y + .5) * 128.;
       const Z = (z + .5) * 128.;
 
+      //TODO: This doesn't work
       /*for(let i = 0; i < 24; i += 4){
         if(X * FrustumPlanes[i] + Y * FrustumPlanes[i | 1] + Z * FrustumPlanes[i | 2] + FrustumPlanes[i | 3] <- ChunkSphereRadius){
           continue Iterator; //Not in frustum

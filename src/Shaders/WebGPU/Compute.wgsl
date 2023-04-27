@@ -10,7 +10,8 @@ struct UniformsStruct{
   RayDirectionLL : vec3<f32>,
   RayDirectionLH : vec3<f32>,
   RayDirectionHL : vec3<f32>,
-  RayDirectionHH : vec3<f32>
+  RayDirectionHH : vec3<f32>,
+  FOV : f32
 }
 
 struct AtomicIndicesStruct{
@@ -27,7 +28,7 @@ struct AtomicIndicesStruct{
 @binding(5) @group(0) var<storage, read_write> DepthBuffer : array<atomic<u32>>;
 
 var<workgroup> SharedInitialRenderListIndex : u32; //This is the render index for the 0th local invocation
-var<workgroup> SharedBoundingRectsArray : array<vec2<u32>, 64>; //This stores the bounding rectangles for each chunk to be rendered
+var<workgroup> SharedBoundingRectsArray : array<vec4<u32>, 64>; //This stores the bounding rectangles for each chunk to be rendered
 
 fn Cross2D(u : vec2<f32>, v : vec2<f32>) -> f32{
   return u.x * v.y - u.y * v.x;
@@ -84,7 +85,7 @@ fn GenerateBoundingRects(LocalInvocationIndex : u32, WorkgroupID : vec3<u32>){
   let Region16_Coordinate = Data[Region128_HI + 531u + InstanceID - InstancesStart];
   let Region16_SSI = Data[Region128_HI + 18u + Region16_Coordinate];
   if(Region16_SSI == 0){
-    SharedBoundingRectsArray[LocalInvocationIndex] = vec2<u32>(1, 0);
+    SharedBoundingRectsArray[LocalInvocationIndex] = vec4<u32>(1, 0, 0, 0);
     return;
   }
   let Region16_HI = (Region16_SSI & ~65535u) | Data[Region16_SSI];
@@ -124,39 +125,29 @@ fn GenerateBoundingRects(LocalInvocationIndex : u32, WorkgroupID : vec3<u32>){
     MaxPoint = ceil((min(MaxPoint, vec2<f32>(0.5)) + .5) * Uniforms.Resolution);
     let u_MinPoint = vec2<u32>(MinPoint);
     let u_MaxPoint = vec2<u32>(MaxPoint);
-    SharedBoundingRectsArray[LocalInvocationIndex] = vec2<u32>((u_MinPoint.y << 16) | u_MinPoint.x, (u_MaxPoint.y << 16) | u_MaxPoint.x);
+    SharedBoundingRectsArray[LocalInvocationIndex] = vec4<u32>((u_MinPoint.y << 16) | u_MinPoint.x, (u_MaxPoint.y << 16) | u_MaxPoint.x, Region128_Coordinate, InstanceID - InstancesStart);
 
     //textureStore(OutputTexture, vec2<i32>(MinPoint), vec4<f32>(1., 1., 1., 1.));
   } else{
-    SharedBoundingRectsArray[LocalInvocationIndex] = vec2<u32>(1, 0);
+    SharedBoundingRectsArray[LocalInvocationIndex] = vec4<u32>(1, 0, 0, 0);
   }
 }
 
 @compute @workgroup_size(8, 8, 1)
-fn Main(@builtin(local_invocation_id) LocalInvocationID : vec3<u32>, @builtin(local_invocation_index) LocalInvocationIndex: u32, @builtin(workgroup_id) WorkgroupID : vec3<u32>){
+fn RasterizationMain(@builtin(local_invocation_id) LocalInvocationID : vec3<u32>, @builtin(local_invocation_index) LocalInvocationIndex: u32, @builtin(workgroup_id) WorkgroupID : vec3<u32>){
   let Resolution = vec2<u32>(Uniforms.Resolution);
-
   loop{
     GenerateBoundingRects(LocalInvocationIndex, WorkgroupID);
     workgroupBarrier();
 
-    let StartingInstanceID = WorkgroupID.x << 6;
     var RenderListIndex : u32 = workgroupUniformLoad(&SharedInitialRenderListIndex) - 1; //The -1 is there because this will be incremented in the loop
-    var NextRenderListIndexStart : u32 = 0u;
-    var Offset : u32;
-    var Region16ListIndex : u32;
+
     var Position128 : vec3<f32>;
-    var Count = 0u;
 
 
 
     for(var i : u32 = 0u; i < 64u; i++){
-      let InstanceID = StartingInstanceID | i;
-      if(i == NextRenderListIndexStart){
-        Count++;
-        /*if(Count == 2){
-          break;
-        }*/
+      /*if(i == NextRenderListIndexStart){
         RenderListIndex++;
         Offset = 531u + StartingInstanceID - RenderListBuffer[(RenderListIndex << 1) + 1];
         NextRenderListIndexStart = RenderListBuffer[((RenderListIndex + 1) << 1) | 1] - StartingInstanceID;
@@ -166,26 +157,27 @@ fn Main(@builtin(local_invocation_id) LocalInvocationID : vec3<u32>, @builtin(lo
         let Region128_HI = (Region128_SSI & ~65535u) | Data[Region128_SSI];
         Region16ListIndex = Region128_HI;
         Position128 = vec3<f32>((vec3<u32>(Region128_Coordinate) >> vec3<u32>(0, 5, 10)) & vec3<u32>(31u)) * 128.;
-      }
-      let BoundingRect = workgroupUniformLoad(&(SharedBoundingRectsArray[i]));
-      if(all(BoundingRect == vec2<u32>(1, 0))){
-        continue;
-      }
-      let MinRect = vec2<u32>(BoundingRect.x, BoundingRect.x >> 16u) & vec2<u32>(65535u);
-      let MaxRect = vec2<u32>(BoundingRect.y, BoundingRect.y >> 16u) & vec2<u32>(65535u);
-
-      /*let Size = (MaxRect + 7) >> 3 - MinRect;
-      if(Size.x * Size.y > 100){
-        continue;
       }*/
 
-      let Region16Count = Data[Region16ListIndex + 530u];
+      let Info = workgroupUniformLoad(&(SharedBoundingRectsArray[i]));
+      if(all(Info == vec4<u32>(1, 0, 0, 0))){
+        continue;
+      }
+      let MinRect = vec2<u32>(Info.x, Info.x >> 16u) & vec2<u32>(65535u);
+      let MaxRect = vec2<u32>(Info.y, Info.y >> 16u) & vec2<u32>(65535u);
 
-      let Region16_Coordinate = Data[Region16ListIndex + Offset + i];
-      let Region16_SSI = Data[Region16ListIndex + 18u + Region16_Coordinate];
+      let Region128_Coordinate = Info.z;
+      let Index = Info.w;
+      let Region128_SSI = Data[65536u + Region128_Coordinate];
+      let Region128_HI = (Region128_SSI & ~65535u) | Data[Region128_SSI];
+
+      Position128 = vec3<f32>((vec3<u32>(Region128_Coordinate) >> vec3<u32>(0, 5, 10)) & vec3<u32>(31u)) * 128.;
+
+
+      let Region16_Coordinate = Data[Region128_HI + 531u + Index];
+      let Region16_SSI = Data[Region128_HI + 18u + Region16_Coordinate];
       if(Region16_SSI == 0){
         //This shouldn't happen
-        SharedBoundingRectsArray[LocalInvocationIndex] = vec2<u32>(1, 0);
         continue;
       }
       let Region16_HI = (Region16_SSI & ~65535u) | Data[Region16_SSI];
@@ -211,14 +203,12 @@ fn Main(@builtin(local_invocation_id) LocalInvocationID : vec3<u32>, @builtin(lo
 
       let InverseResolution = 1. / Uniforms.Resolution;
 
-      let FOV = 70.;
       for(var x8 = MinRect.x; x8 < MaxRect.x; x8 += 8){
         for(var y8 = MinRect.y; y8 < MaxRect.y; y8 += 8){
           let x = x8 + LocalInvocationID.x;
           let y = y8 + LocalInvocationID.y;
           var Point = vec2<f32>(vec2<u32>(x, y)) * InverseResolution;
           let RayDirection = mix(mix(Uniforms.RayDirectionHL, Uniforms.RayDirectionLL, Point.x), mix(Uniforms.RayDirectionHH, Uniforms.RayDirectionLH, Point.x), Point.y);
-          //let RayDirection = (normalize(vec3<f32>(Point * 2. - 1., 2. / tan(FOV * 0.0087266461)))) * RotateX(Uniforms.CameraRotation.y) * RotateY(3.14159 - Uniforms.CameraRotation.x);
           let InverseRayDirection = 1. / RayDirection;
 
 
@@ -238,15 +228,12 @@ fn Main(@builtin(local_invocation_id) LocalInvocationID : vec3<u32>, @builtin(lo
 
 
           let UintDepth = u32(tmin * 256.);
-          if(Hit/* && atomicMin(&(DepthBuffer[y * Resolution.x + x]), UintDepth) > UintDepth*/){
+          if(Hit && atomicMin(&(DepthBuffer[y * Resolution.x + x]), UintDepth) > UintDepth){
             textureStore(OutputTexture, vec2<u32>(x, y), vec4<f32>(HitCoordinate.xyz, 1.));
           }
 
         }
       }
-
-
-
     }
 
 
