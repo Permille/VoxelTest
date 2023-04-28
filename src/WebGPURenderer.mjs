@@ -588,7 +588,7 @@ export default class WebGPURenderer{
     for(let i = 0; i < 16; ++i) this.UniformDataView.setFloat32(i << 2, ModelViewProjectionMatrix[i], true);
     //for(let i = 0; i < 16; ++i) this.UniformDataView.setFloat32(64 | i << 2, InverseModelViewProjectionMatrix[i], true);
     this.UniformDataView.setFloat32(128, window.performance.now() / 1000., true);
-    this.UniformDataView.setFloat32(132, 0, true);
+    this.UniformDataView.setUint32(132, Main.KeyboardControls.IsPressed("F4") ? 1 : 0, true);
     this.UniformDataView.setFloat32(136, window.innerWidth, true);
     this.UniformDataView.setFloat32(140, window.innerHeight, true);
     this.UniformDataView.setFloat32(144, this.Camera.RotationX, true);

@@ -2,7 +2,7 @@ struct UniformsStruct{
   ModelViewProjection : mat4x4<f32>,
   InverseModelViewProjection : mat4x4<f32>,
   Time : f32,
-  Empty : u32,
+  DebugFlags : u32,
   Resolution : vec2<f32>,
   CameraRotation : vec2<f32>,
   RenderListLength : u32,
@@ -37,9 +37,6 @@ struct TileInfoStruct{
 @binding(6) @group(0) var<storage, read_write> WriteBuffer : array<vec4<u32>>;
 @binding(7) @group(0) var<storage, read_write> TilesStartW : array<u32>;
 @binding(8) @group(0) var<storage, read> TilesStartR : array<u32>;
-
-var<workgroup> SharedInitialRenderListIndex : u32; //This is the render index for the 0th local invocation
-var<workgroup> SharedBoundingRectsArray : array<vec4<u32>, 256>; //This stores the bounding rectangles for each chunk to be rendered
 
 const Font = array<vec2<u32>, 16>(
   vec2<u32>(0x3636361cu, 0x1c363636u),
@@ -114,7 +111,6 @@ fn GenerateBoundingRects(LocalInvocationIndex : u32, WorkgroupID : vec3<u32>){
   let Region16_Coordinate = Data[Region128_HI + 531u + InstanceID - InstancesStart];
   let Region16_SSI = Data[Region128_HI + 18u + Region16_Coordinate];
   if(Region16_SSI == 0){
-    SharedBoundingRectsArray[LocalInvocationIndex] = vec4<u32>(1, 0, 0, 0);
     return;
   }
   let Region16_HI = (Region16_SSI & ~65535u) | Data[Region16_SSI];
@@ -150,22 +146,12 @@ fn GenerateBoundingRects(LocalInvocationIndex : u32, WorkgroupID : vec3<u32>){
     MaxPoint = max(MaxPoint, Point);
   }
   if(AllAreOutside){
-    SharedBoundingRectsArray[LocalInvocationIndex] = vec4<u32>(1, 0, 0, 0);
     return;
   }
   MinPoint = floor((max(MinPoint, vec2<f32>(-.5)) + .5) * Uniforms.Resolution);
   MaxPoint = ceil((min(MaxPoint, vec2<f32>(0.5)) + .5) * Uniforms.Resolution);
   let u_MinPoint = vec2<u32>(MinPoint);
   let u_MaxPoint = vec2<u32>(MaxPoint);
-  SharedBoundingRectsArray[LocalInvocationIndex] = vec4<u32>((u_MinPoint.y << 16) | u_MinPoint.x, (u_MaxPoint.y << 16) | u_MaxPoint.x, Region128_Coordinate, InstanceID - InstancesStart);
-
-  /*
-  struct TileInfoStruct{
-    Index : atomic<u32>,
-    NextTileInfo : u32,
-    Tiles : array<u32, 30>
-  }
-  */
 
   let Min16 = u_MinPoint >> vec2<u32>(4);
   let Max16 = (u_MaxPoint + vec2<u32>(15)) >> vec2<u32>(4);
@@ -178,11 +164,9 @@ fn GenerateBoundingRects(LocalInvocationIndex : u32, WorkgroupID : vec3<u32>){
 
       } else if(TilesIndex == 30){
         atomicAdd(&AtomicIndices.TileInfoIndex, 1);
-        for(var x = 0u; x < 16; x++){
-          for(var y = 0u; y < 16; y++){
-            textureStore(OutputTexture, vec2<u32>((x16 << 4) | x, (y16 << 4) | y), vec4<f32>(1., 0., 0., 1.));
-          }
-        }
+      }
+      if(TilesIndex < 30){
+        TileInfo[TilesGroup].Tiles[TilesIndex] = (((InstanceID - InstancesStart) & 511) << 19) | Region128_Coordinate;
       }
     }
   }
@@ -190,47 +174,78 @@ fn GenerateBoundingRects(LocalInvocationIndex : u32, WorkgroupID : vec3<u32>){
 
 @compute @workgroup_size(16, 16, 1)
 fn RasterizationMain(@builtin(local_invocation_id) LocalInvocationID : vec3<u32>, @builtin(local_invocation_index) LocalInvocationIndex: u32, @builtin(workgroup_id) WorkgroupID : vec3<u32>){
-  let Resolution = vec2<u32>(Uniforms.Resolution);
+  GenerateBoundingRects(LocalInvocationIndex, WorkgroupID);
+}
+
+
+fn ApplyFont(Pixel : vec2<u32>, Number : u32) -> bool{
+  let FontCoords = vec2<u32>(15u - Pixel.x, Pixel.y) + vec2<u32>(0xffffffff, 0xfffffffc);
+  if(any(FontCoords >= vec2<u32>(14, 8))){
+    return false;
+  }
+
+  let ClampedNumber = select(Number, 255, Number > 255);
+  let Digit0 = ClampedNumber & 15u;
+  let Digit1 = (ClampedNumber >> 4) & 15u;
+  let Output0 = (Font[Digit0][(FontCoords.y >> 2u) & 1u] >> ((FontCoords.y & 3u) << 3u)) & 255u;
+  let Output1 = ((Font[Digit1][(FontCoords.y >> 2u) & 1u] >> ((FontCoords.y & 3u) << 3u)) & 255u) << 7u;
+  return (((Output0 | Output1) >> FontCoords.x) & 1u) == 1u;
+}
+
+var<workgroup> SharedTilesCount : u32;
+
+@compute @workgroup_size(16, 16, 1)
+fn TileProcessingMain(
+  @builtin(local_invocation_id) LocalInvocationID : vec3<u32>,
+  @builtin(local_invocation_index) LocalInvocationIndex: u32,
+  @builtin(workgroup_id) WorkgroupID : vec3<u32>,
+  @builtin(global_invocation_id) Pixel : vec3<u32>
+){
   loop{
-    GenerateBoundingRects(LocalInvocationIndex, WorkgroupID);
+    let XSize = (u32(Uniforms.Resolution.x) + 15) >> 4;
+    var TileIndex = WorkgroupID.y * XSize + WorkgroupID.x;
+    if(LocalInvocationIndex == 0u){
+      SharedTilesCount = atomicLoad(&TileInfo[TileIndex].Index);
+    }
     workgroupBarrier();
+    let TilesCount = workgroupUniformLoad(&SharedTilesCount);
 
-    /*for(var i : u32 = 0u; i < 256u; i++){
-      let Info = workgroupUniformLoad(&(SharedBoundingRectsArray[i]));
-      if(all(Info == vec4<u32>(1, 0, 0, 0))){
-        continue;
-      }
-      let MinRect = vec2<u32>(Info.x, Info.x >> 16u) & vec2<u32>(65535u);
-      let MaxRect = vec2<u32>(Info.y, Info.y >> 16u) & vec2<u32>(65535u);
+    let Iterations = min(TilesCount, 30u);
 
-      let Region128_Coordinate = Info.z;
-      let Index = Info.w;
+    let FloatPixel = vec2<f32>(Pixel.xy) / Uniforms.Resolution;
+    let RayDirection = mix(mix(Uniforms.RayDirectionHL, Uniforms.RayDirectionLL, FloatPixel.x), mix(Uniforms.RayDirectionHH, Uniforms.RayDirectionLH, FloatPixel.x), FloatPixel.y);
+    let InverseRayDirection = 1. / RayDirection;
+
+    var Done : bool = false;
+
+    var Colour = vec4<f32>(0., 0., 0., 1.);//saturate(vec4<f32>((f32(TilesCount) - 64.) / 32., (f32(TilesCount) - 32) / 32., f32(TilesCount) / 32., 1.));
+    var Depth = 3.4028234e38;
+
+    for(var i = 0u; i < Iterations; i++){
+      //workgroupBarrier();
+      let Info = TileInfo[TileIndex].Tiles[i];
+      let Region128_Coordinate = Info & 524287;
+      let Region16Index = (Info >> 19) & 511;
+
       let Region128_SSI = Data[65536u + Region128_Coordinate];
       let Region128_HI = (Region128_SSI & ~65535u) | Data[Region128_SSI];
 
-      var Position128 = vec3<f32>((vec3<u32>(Region128_Coordinate) >> vec3<u32>(0, 5, 10)) & vec3<u32>(31u)) * 128.;
+      let Position128 = vec3<f32>((vec3<u32>(Region128_Coordinate) >> vec3<u32>(0, 5, 10)) & vec3<u32>(31u)) * 128.;
 
 
-      let Region16_Coordinate = Data[Region128_HI + 531u + Index];
+      let Region16_Coordinate = Data[Region128_HI + 531u + Region16Index];
       let Region16_SSI = Data[Region128_HI + 18u + Region16_Coordinate];
-      if(Region16_SSI == 0){
-        //This shouldn't happen
-        continue;
-      }
+
       let Region16_HI = (Region16_SSI & ~65535u) | Data[Region16_SSI];
       let Region16_Position = Data[Region16_HI + 3u] & 511u;
 
       let Temp = Data[Region16_HI + 2u];
       let Min_u = vec3<u32>(Temp, Temp >> 4, Temp >> 8) & vec3<u32>(15u);
       let Max_u = (vec3<u32>(Temp >> 12, Temp >> 16, Temp >> 20) & vec3<u32>(15u)) + vec3<u32>(1u);
-      if(any(Min_u > Max_u)){
-        continue;
-      }
 
       let Position = Position128 + vec3<f32>((vec3<u32>(Region16_Position) >> vec3<u32>(0, 3, 6)) & vec3<u32>(7)) * 16.;
       let MinPos = Position + vec3<f32>(Min_u);
       let MaxPos = Position + vec3<f32>(Max_u);
-
 
       let InverseCuboidSize = 1. / (MaxPos - MinPos);
       let PositionOffset = Uniforms.CameraPosition - MinPos;
@@ -238,75 +253,49 @@ fn RasterizationMain(@builtin(local_invocation_id) LocalInvocationID : vec3<u32>
       let MinPosMinusRayOrigin = MinPos - Uniforms.CameraPosition;
       let MaxPosMinusRayOrigin = MaxPos - Uniforms.CameraPosition;
 
-      let InverseResolution = 1. / Uniforms.Resolution;
+      let t024 = MinPosMinusRayOrigin * InverseRayDirection;
+      let t135 = MaxPosMinusRayOrigin * InverseRayDirection;
 
-      for(var x8 = MinRect.x; x8 < MaxRect.x; x8 += 16){
-        for(var y8 = MinRect.y; y8 < MaxRect.y; y8 += 16){
-          let x = x8 + LocalInvocationID.x;
-          let y = y8 + LocalInvocationID.y;
-          var Point = vec2<f32>(vec2<u32>(x, y)) * InverseResolution;
-          let RayDirection = mix(mix(Uniforms.RayDirectionHL, Uniforms.RayDirectionLL, Point.x), mix(Uniforms.RayDirectionHH, Uniforms.RayDirectionLH, Point.x), Point.y);
-          let InverseRayDirection = 1. / RayDirection;
+      let ComponentMin = min(t024, t135);
+      let ComponentMax = max(t024, t135);
 
+      let tmin = max(max(ComponentMin.x, ComponentMin.y), ComponentMin.z);
+      let tmax = min(min(ComponentMax.x, ComponentMax.y), ComponentMax.z);
 
-          let t024 = MinPosMinusRayOrigin * InverseRayDirection;
-          let t135 = MaxPosMinusRayOrigin * InverseRayDirection;
+      let Hit = tmax >= 0 && tmin <= tmax;
 
-          let ComponentMin = min(t024, t135);
-          let ComponentMax = max(t024, t135);
-
-          let tmin = max(max(ComponentMin.x, ComponentMin.y), ComponentMin.z);
-          let tmax = min(min(ComponentMax.x, ComponentMax.y), ComponentMax.z);
-
-          let Hit = tmax >= 0 && tmin <= tmax;
-
-          let HitCoordinate = (PositionOffset + tmin * RayDirection) * InverseCuboidSize;
+      let HitCoordinate = (PositionOffset + tmin * RayDirection) * InverseCuboidSize;
 
 
 
-          let UintDepth = u32(tmin * 256.);
-          if(Hit
-            //&& atomicMin(&(DepthBuffer[y * Resolution.x + x]), UintDepth) > UintDepth
-          ){
-            textureStore(OutputTexture, vec2<u32>(x, y), vec4<f32>(HitCoordinate.xyz, 1.));
-          }
-
+      if(Hit){
+        Done = true;
+        if(tmin < Depth){
+          Depth = tmin;
+          Colour = vec4<f32>(HitCoordinate.xyz, 1.);
         }
       }
-    }*/
+    }
+    workgroupBarrier();
+    if(((Uniforms.DebugFlags >> 0) & 1u) == 1u){
+      if(TilesCount >= 30){
+        Colour = vec4<f32>(Colour.x, Colour.yz * .5, 1.);
+      }
+      if(ApplyFont(LocalInvocationID.xy, TilesCount)){
+        Colour = vec4<f32>(1.);
+      } else{
+        Colour = vec4<f32>((Colour.xyz) * .7, 1.);
+      }
+    }
 
 
+    textureStore(OutputTexture, (WorkgroupID.xy << vec2<u32>(4)) | LocalInvocationID.xy, Colour);
 
 
-    if(workgroupUniformLoad(&(SharedBoundingRectsArray[0])).z != 0xeeeeeeee){ //This is meant to always be true
+    if(TilesCount != 0xeeeeeeee){ //This should always be true
       break;
     }
   }
-
-}
-
-
-@compute @workgroup_size(16, 16, 1)
-fn TileProcessingMain(@builtin(local_invocation_id) LocalInvocationID : vec3<u32>, @builtin(local_invocation_index) LocalInvocationIndex: u32, @builtin(workgroup_id) WorkgroupID : vec3<u32>){
-  let XSize = (u32(Uniforms.Resolution.x) + 15) >> 4;
-  let Items = atomicLoad(&TileInfo[TilesStartR[WorkgroupID.y * XSize + WorkgroupID.x] ].Index);
-  var Colour = vec4<f32>((f32(Items) - 64.) / 32., (f32(Items) - 32) / 32., f32(Items) / 32., 1.);
-
-  let FontCoords = vec2<u32>(15u - LocalInvocationID.x, LocalInvocationID.y) + vec2<u32>(0xffffffff, 0xfffffffc);
-  if(all(FontCoords < vec2<u32>(14, 8))){
-    let Number = select(Items, 255, Items > 255);
-    let Digit0 = Number & 15u;
-    let Digit1 = (Number >> 4) & 15u;
-    let Output0 = (Font[Digit0][(FontCoords.y >> 2u) & 1u] >> ((FontCoords.y & 3u) << 3u)) & 255u;
-    let Output1 = ((Font[Digit1][(FontCoords.y >> 2u) & 1u] >> ((FontCoords.y & 3u) << 3u)) & 255u) << 7u;
-    if((((Output0 | Output1) >> FontCoords.x) & 1u) == 1u){
-      Colour = vec4<f32>(min(Colour.xyz * 0.7, vec3<f32>(0.7)), 1.);//vec4<f32>(.5 + .5 * cos(Uniforms.Time * vec3<f32>(0, 2, 4)), 1.);
-    }
-  }
-
-  textureStore(OutputTexture, (WorkgroupID.xy << vec2<u32>(4)) | LocalInvocationID.xy, Colour);
-
-
 }
 
 @compute @workgroup_size(16, 16)
