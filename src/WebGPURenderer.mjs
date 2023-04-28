@@ -3,10 +3,8 @@ import * as M from "./Constants/Memory.mjs";
 import {AddEventListener, FireEvent} from "./Events.mjs";
 import MainShader from "./Shaders/WebGPU/Main.wgsl";
 import ComputeShader from "./Shaders/WebGPU/Compute.wgsl";
-import ClearDepthBufferShader from "./Shaders/WebGPU/ClearDepthBuffer.wgsl";
 
 export default class WebGPURenderer{
-  static IndexArray = new Uint8Array([0, 1, 2, 3, 4, 3, 5, 1, 6]);
   constructor(Canvas, Camera, Memory){
     this.Canvas = Canvas;
     this.Camera = Camera;
@@ -23,6 +21,8 @@ export default class WebGPURenderer{
 
     this.RenderInstances = 0;
     this.RenderListLength = 0;
+
+    this.ShaderDebugData = new Uint32Array(4);
 
     this.Initialised = false;
   }
@@ -65,11 +65,11 @@ export default class WebGPURenderer{
     });
 
     this.AtomicListIndicesBuffer = this.Device.createBuffer({
-      "size": 16,
+      "size": this.ShaderDebugData.byteLength,
       "usage": GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     });
     this.AtomicListIndicesBufferCopy = this.Device.createBuffer({
-      "size": 16,
+      "size": this.ShaderDebugData.byteLength,
       "usage": GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
     });
 
@@ -87,8 +87,11 @@ export default class WebGPURenderer{
       console.timeEnd();
     }.call(this);
 
-    this.DepthBuffer = null;
+    this.TileInfoBuffer = null;
+    this.TileInfoBufferSize = 33554432;
 
+    this.TilesStartBuffer = null;
+    this.TilesStartBufferSize = 0;
 
     this.ComputeShaderModule = this.Device.createShaderModule({"code": ComputeShader});
     this.RasterizationBindGroupLayout = this.Device.createBindGroupLayout({
@@ -135,6 +138,68 @@ export default class WebGPURenderer{
           "buffer": {
             "type": "storage"
           }
+        },
+        {
+          "binding": 7,
+          "visibility": GPUShaderStage.COMPUTE,
+          "buffer": {
+            "type": "storage"
+          }
+        }
+      ]
+    });
+
+    this.TileProcessingBindGroupLayout = this.Device.createBindGroupLayout({
+      "entries": [
+        {
+          "binding": 0,
+          "visibility": GPUShaderStage.COMPUTE,
+          "buffer": {
+            "type": "read-only-storage"
+          }
+        },
+        {
+          "binding": 1,
+          "visibility": GPUShaderStage.COMPUTE,
+          "storageTexture": {
+            "access": "write-only",
+            "format": "rgba8unorm"
+          }
+        },
+        {
+          "binding": 2,
+          "visibility": GPUShaderStage.COMPUTE,
+          "buffer": {
+            "type": "uniform"
+          }
+        },
+        {
+          "binding": 3,
+          "visibility": GPUShaderStage.COMPUTE,
+          "buffer": {
+            "type": "storage"
+          }
+        },
+        {
+          "binding": 4,
+          "visibility": GPUShaderStage.COMPUTE,
+          "buffer": {
+            "type": "read-only-storage"
+          }
+        },
+        {
+          "binding": 5,
+          "visibility": GPUShaderStage.COMPUTE,
+          "buffer": {
+            "type": "storage"
+          }
+        },
+        {
+          "binding": 8,
+          "visibility": GPUShaderStage.COMPUTE,
+          "buffer": {
+            "type": "read-only-storage"
+          }
         }
       ]
     });
@@ -153,23 +218,30 @@ export default class WebGPURenderer{
       }
     });
 
+    this.TileProcessingPipeline = this.Device.createComputePipeline({
+      "layout": this.Device.createPipelineLayout({
+        "bindGroupLayouts": [this.TileProcessingBindGroupLayout]
+      }),
+      "compute": {
+        "module": this.ComputeShaderModule,
+        "entryPoint": "TileProcessingMain",
+        "constants": {
+          //"Test": 0
+        }
+      }
+    });
+
     this.RasterizationOutputTexture = null;
     this.RasterizationBindGroup = null;
+    this.TileProcessingBindGroup = null;
 
 
 
-    this.ClearDepthBufferShaderModule = this.Device.createShaderModule({"code": ClearDepthBufferShader});
-    this.ClearDepthBufferBindGroupLayout = this.Device.createBindGroupLayout({
+    this.ClearTileInfoBufferShaderModule = this.Device.createShaderModule({"code": ComputeShader});
+    this.ClearTileInfoBufferBindGroupLayout = this.Device.createBindGroupLayout({
       "entries": [
         {
-          "binding": 0,
-          "visibility": GPUShaderStage.COMPUTE,
-          "buffer": {
-            "type": "uniform"
-          }
-        },
-        {
-          "binding": 1,
+          "binding": 6,
           "visibility": GPUShaderStage.COMPUTE,
           "buffer": {
             "type": "storage"
@@ -177,13 +249,25 @@ export default class WebGPURenderer{
         }
       ]
     });
-    this.ClearDepthBufferPipeline = this.Device.createComputePipeline({
+    this.ClearTileInfoBufferPipeline = this.Device.createComputePipeline({
       "layout": this.Device.createPipelineLayout({
-        "bindGroupLayouts": [this.ClearDepthBufferBindGroupLayout]
+        "bindGroupLayouts": [this.ClearTileInfoBufferBindGroupLayout]
       }),
       "compute": {
-        "module": this.ClearDepthBufferShaderModule,
-        "entryPoint": "Main",
+        "module": this.ClearTileInfoBufferShaderModule,
+        "entryPoint": "ClearBufferMain",
+        "constants": {
+          //"Test": 0
+        }
+      }
+    });
+    this.ClearTilesStartBufferPipeline = this.Device.createComputePipeline({
+      "layout": this.Device.createPipelineLayout({
+        "bindGroupLayouts": [this.ClearTileInfoBufferBindGroupLayout]
+      }),
+      "compute": {
+        "module": this.ClearTileInfoBufferShaderModule,
+        "entryPoint": "ClearTilesStartBufferMain",
         "constants": {
           //"Test": 0
         }
@@ -272,7 +356,7 @@ export default class WebGPURenderer{
   async InitialiseDependencies(){
     await InitialisedMain;
     Main.DebugInfo.Add(function(){
-      return this.FPS + " fps";
+      return this.FPS + " fps " + this.ShaderDebugData;
     }.bind(this));
   }
   Resize(Width, Height){
@@ -286,8 +370,16 @@ export default class WebGPURenderer{
       "usage": GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
     });
 
-    this.DepthBuffer = this.Device.createBuffer({
-      "size": (Width * Height) << 2,
+    if(this.TileInfoBuffer !== null) this.TileInfoBuffer.destroy();
+    this.TileInfoBuffer = this.Device.createBuffer({
+      "size": this.TileInfoBufferSize,
+      "usage": GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    });
+
+    this.TilesStartBufferSize = 4 << (32 - Math.clz32(((Width + 7) >> 3) * ((Height + 7) >> 3) - 1));
+    if(this.TilesStartBuffer !== null) this.TilesStartBuffer.destroy();
+    this.TilesStartBuffer = this.Device.createBuffer({
+      "size": this.TilesStartBufferSize,
       "usage": GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     });
 
@@ -325,25 +417,83 @@ export default class WebGPURenderer{
         {
           "binding": 5,
           "resource": {
-            "buffer": this.DepthBuffer
+            "buffer": this.TileInfoBuffer
+          }
+        },
+        {
+          "binding": 7,
+          "resource": {
+            "buffer": this.TilesStartBuffer
           }
         }
       ]
     });
 
-    this.ClearDepthBufferBindGroup = this.Device.createBindGroup({
-      "layout": this.ClearDepthBufferBindGroupLayout,
+    this.TileProcessingBindGroup = this.Device.createBindGroup({
+      "layout": this.TileProcessingBindGroupLayout,
       "entries": [
         {
           "binding": 0,
+          "resource": {
+            "buffer": this.DataBuffer
+          }
+        },
+        {
+          "binding": 1,
+          "resource": this.RasterizationOutputTexture.createView()
+        },
+        {
+          "binding": 2,
           "resource": {
             "buffer": this.UniformBuffer
           }
         },
         {
-          "binding": 1,
+          "binding": 3,
           "resource": {
-            "buffer": this.DepthBuffer
+            "buffer": this.AtomicListIndicesBuffer
+          }
+        },
+        {
+          "binding": 4,
+          "resource": {
+            "buffer": this.RenderListBuffer
+          }
+        },
+        {
+          "binding": 5,
+          "resource": {
+            "buffer": this.TileInfoBuffer
+          }
+        },
+        {
+          "binding": 8,
+          "resource": {
+            "buffer": this.TilesStartBuffer
+          }
+        }
+      ]
+    });
+
+    this.ClearTileInfoBufferBindGroup = this.Device.createBindGroup({
+      "layout": this.ClearTileInfoBufferBindGroupLayout,
+      "entries": [
+        {
+          "binding": 6,
+          "resource": {
+            "buffer": this.TileInfoBuffer
+          }
+        }
+      ]
+    });
+
+    this.ClearTilesStartBufferBindGroup = this.Device.createBindGroup({
+      "layout": this.ClearTileInfoBufferBindGroupLayout,
+      "entries": [
+        {
+          "binding": 6,
+          "resource": {
+            "buffer": this.TilesStartBuffer
           }
         }
       ]
@@ -460,6 +610,7 @@ export default class WebGPURenderer{
     this.UniformDataView.setFloat32(228, RayDirectionHH[1], true);
     this.UniformDataView.setFloat32(232, RayDirectionHH[2], true);
     this.UniformDataView.setFloat32(240, this.FOV, true);
+    this.UniformDataView.setUint32(244, this.TileInfoBufferSize, true);
     this.Device.queue.writeBuffer(this.UniformBuffer, 0, this.UniformDataView.buffer, this.UniformDataView.byteOffset, this.UniformDataView.byteLength);
 
 
@@ -478,14 +629,22 @@ export default class WebGPURenderer{
     });
     ClearingPassEncoder.end();
 
-    const ClearDepthBufferPassEncoder = CommandEncoder.beginComputePass();
-    ClearDepthBufferPassEncoder.setPipeline(this.ClearDepthBufferPipeline);
-    ClearDepthBufferPassEncoder.setBindGroup(0, this.ClearDepthBufferBindGroup);
+    const ClearTileInfoBufferPassEncoder = CommandEncoder.beginComputePass();
+    ClearTileInfoBufferPassEncoder.setPipeline(this.ClearTileInfoBufferPipeline);
+    ClearTileInfoBufferPassEncoder.setBindGroup(0, this.ClearTileInfoBufferBindGroup);
 
-    //IMPORTANT: This will not render the last few regions that are at the end.
-    //To do that, add 64 to the RenderInstances.
-    ClearDepthBufferPassEncoder.dispatchWorkgroups((window.innerWidth + 15) >> 4, (window.innerHeight + 15) >> 4, 1);
-    ClearDepthBufferPassEncoder.end();
+    ClearTileInfoBufferPassEncoder.dispatchWorkgroups(256, this.TileInfoBufferSize >> 20, 1);
+    ClearTileInfoBufferPassEncoder.end();
+
+    const ClearTilesStartBufferBindGroup = CommandEncoder.beginComputePass();
+    ClearTilesStartBufferBindGroup.setPipeline(this.ClearTilesStartBufferPipeline);
+    ClearTilesStartBufferBindGroup.setBindGroup(0, this.ClearTilesStartBufferBindGroup);
+
+    ClearTilesStartBufferBindGroup.dispatchWorkgroups(this.TilesStartBufferSize >> 12, 1, 1);
+    ClearTilesStartBufferBindGroup.end();
+
+
+
 
     this.Device.queue.writeBuffer(this.AtomicListIndicesBuffer, 0, new ArrayBuffer(16), 0, 16);
 
@@ -494,8 +653,15 @@ export default class WebGPURenderer{
     RasterizationPassEncoder.setPipeline(this.RasterizationPipeline);
     RasterizationPassEncoder.setBindGroup(0, this.RasterizationBindGroup);
 
-    RasterizationPassEncoder.dispatchWorkgroups((this.RenderInstances + 63) >> 6, 1, 1);
+    RasterizationPassEncoder.dispatchWorkgroups((this.RenderInstances + 63) >> 8, 1, 1);
     RasterizationPassEncoder.end();
+
+    const TileProcessingPassEncoder = CommandEncoder.beginComputePass();
+    TileProcessingPassEncoder.setPipeline(this.TileProcessingPipeline);
+    TileProcessingPassEncoder.setBindGroup(0, this.TileProcessingBindGroup);
+
+    TileProcessingPassEncoder.dispatchWorkgroups((window.innerWidth + 15) >> 4, (window.innerHeight + 15) >> 4, 1);
+    TileProcessingPassEncoder.end();
 
     const DrawingPassEncoder = CommandEncoder.beginRenderPass({
       "colorAttachments": [
@@ -517,7 +683,7 @@ export default class WebGPURenderer{
 
     const NewCommandEncoder = this.Device.createCommandEncoder();
     await this.AtomicListIndicesBufferCopy.mapAsync(GPUMapMode.READ);
-    console.log(...new Uint32Array(this.AtomicListIndicesBufferCopy.getMappedRange()));
+    this.ShaderDebugData.set(new Uint32Array(this.AtomicListIndicesBufferCopy.getMappedRange()));
     this.AtomicListIndicesBufferCopy.unmap();
 
     NewCommandEncoder.copyBufferToBuffer(this.AtomicListIndicesBuffer, 0, this.AtomicListIndicesBufferCopy, 0, 16);
@@ -552,6 +718,9 @@ export default class WebGPURenderer{
       const X = (x + .5) * 128.;
       const Y = (y + .5) * 128.;
       const Z = (z + .5) * 128.;
+
+      //My rendering method is inefficient for large objects
+      //if(Math.floor(Math.hypot(X - this.Camera.PositionX, Y - this.Camera.PositionY, Z - this.Camera.PositionZ)) < 128) continue Iterator;
 
       //TODO: This doesn't work
       /*for(let i = 0; i < 24; i += 4){
