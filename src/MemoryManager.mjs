@@ -190,16 +190,16 @@ export default class MemoryManager{
     Atomics.store(this.i32, SegmentID << 16 | M.I_MANAGEMENT_LOCK, 0);
     Atomics.notify(this.i32, SegmentID << 16 | M.I_MANAGEMENT_LOCK);
   }
-  Deallocate(SegmentAndStackIndex){
+  Deallocate(SegmentIndex, StackIndex){
     //TODO: I (hopefully) don't need to care about locks for this
 
-    const Freeable = Atomics.load(this.u32, SegmentAndStackIndex) & 65535; //Gets allocation size
-    Atomics.add(this.u32, (SegmentAndStackIndex & 0xffff0000) | M.I_DEALLOCATION_COUNT, Freeable); //Add allocation size to the amount of freeable memory
-    Atomics.or(this.u32, SegmentAndStackIndex, 1); // Mark as unloaded
+    const Freeable = Atomics.load(this.u32, SegmentIndex << 16 | StackIndex) & 65535; //Gets allocation size
+    Atomics.add(this.u32, SegmentIndex << 16 | M.I_DEALLOCATION_COUNT, Freeable); //Add allocation size to the amount of freeable memory
+    Atomics.or(this.u32, SegmentIndex << 16 | StackIndex, 1); // Mark as unloaded
   }
 
-  RequestGPUUpload(SSI){
-    Atomics.add(this.u32, (SSI & 0xffff0000) | M.I_NEEDS_GPU_UPLOAD, Atomics.load(this.u32, SSI) & 65535);
+  RequestGPUUpload(SegmentIndex, StackIndex){
+    Atomics.add(this.u32, SegmentIndex << 16 | M.I_NEEDS_GPU_UPLOAD, Atomics.load(this.u32, SegmentIndex << 16 | StackIndex) & 65535);
   }
 
   GetUsedMemory(){

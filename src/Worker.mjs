@@ -9,9 +9,16 @@ import {I_INFO_LOADED_CUBES_COUNTER} from "./Constants/Memory.mjs";
 
 const WasmModule = new WebAssembly.Module(WasmBinary);
 
+const Heights = new Float32Array(256 * 256);
+for(let z = 0; z < 256; ++z) for(let x = 0; x < 256; ++x){
+  Heights[z << 8 | x] = GetHeight(x * 16, z * 16);
+}
 
-
-
+const InterpolatedHeights = new Int32Array(32 * 32);
+const Min4s = new Int32Array(16);
+const Max4s = new Int32Array(16);
+const GroundTypes = new Uint32Array([2, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]);
+const EmptyCube = new Uint32Array(4096);
 
 self.Times = new Float64Array(32 * 32);
 
@@ -20,21 +27,14 @@ class WorkerMain{
     this.MemoryBuffer = MessageData.WasmMemory.buffer;
     this.u32 = new Uint32Array(this.MemoryBuffer);
     this.i32 = new Int32Array(this.MemoryBuffer);
-    this.f32 = new Float32Array(this.MemoryBuffer);
-
-    const Offset = this.u32[M.I_HEIGHT_DATA_INDEX];
-    for(let z = 0; z < 256; ++z) for(let x = 0; x < 256; ++x){
-      this.f32[Offset + (z << 8 | x)] = GetHeight(x * 16, z * 16);
-    }
-
     this.ID = MessageData.ID;
 
 
     this.Memory = new MemoryManager(this.MemoryBuffer);
 
-    this.Children128SegmentAndStackIndex = this.Memory.Allocate(514, true);//self.WasmInstance.exports.Allocate(514, true);
-    this.AllocationTemplateSegmentAndStackIndex = this.Memory.Allocate(8192, true);//self.WasmInstance.exports.Allocate(8192, true);
-    this.FreeCubeIndicesSegmentAndStackIndex = this.Memory.Allocate(514, true);//self.WasmInstance.exports.Allocate(514, true);
+    this.Children128SegmentAndStackIndex = this.Memory.Allocate(514, true);
+    this.AllocationTemplateSegmentAndStackIndex = this.Memory.Allocate(8192, true);
+    this.FreeCubeIndicesSegmentAndStackIndex = this.Memory.Allocate(514, true);
 
     {
       const FreeCubeSegmentHeapIndex = (this.FreeCubeIndicesSegmentAndStackIndex & ~65535) | this.u32[this.FreeCubeIndicesSegmentAndStackIndex];
@@ -43,9 +43,8 @@ class WorkerMain{
       }
     }
 
-    //this.TypesSet = new IterableSet(8192, this.Memory);
-    this.TypesSetSSI = self.WasmInstance.exports.SetCreate(8192);
-    this.TempRLESegmentAndStackIndex = this.Memory.Allocate(8210, true);//self.WasmInstance.exports.Allocate(8210, true);
+    this.TypesSet = new IterableSet(8192, this.Memory);
+    this.TempRLESegmentAndStackIndex = this.Memory.Allocate(8210, true);
   }
   [LOAD_REGIONS](){
     const MinX128 = this.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MIN_X)];
@@ -55,15 +54,14 @@ class WorkerMain{
     const MaxY128 = this.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MAX_Y)];
     const MaxZ128 = this.u32[M.I_LOADED_VOLUME_BOUNDS_START + (0 << 3 | M.MAX_Z)];
     for(let z128 = MinZ128; z128 < MaxZ128; ++z128) for(let x128 = MinX128; x128 < MaxX128; ++x128){
-      const HeightDataOffset = this.u32[M.I_HEIGHT_DATA_INDEX];
       let MinY = 32767;
       let MaxY = -32768;
       for(let z = 0; z < 10; ++z) for(let x = 0; x < 10; ++x){
-        const Height = this.f32[HeightDataOffset + (((z128 << 11) + (z << 8)) | ((x128 << 3) + x))];
+        const Height = Heights[((z128 << 11) + (z << 8)) | ((x128 << 3) + x)];
         MinY = Math.min(MinY, Height);
         MaxY = Math.max(MaxY, Height);
       }
-      for(let y128 = MinY128; y128 < MaxY128; ++y128){
+      for(let y128 = MinY128; y128 <= MaxY128; ++y128){
         if(y128 < Math.floor(MinY / 128) || y128 > Math.floor(MaxY / 128)){
           //Mark region as fully empty
           Atomics.or(this.u32, this.u32[M.I_WORLD_GRID_INFO_INDEX] + (0 << 13 | z128 << 8 | y128 << 3 | x128 >> 2), M.MASK_IS_EMPTY << ((x128 & 3) << 3));
@@ -76,14 +74,6 @@ class WorkerMain{
     }
   }
   LoadRegion(x128, y128, z128){
-    const InterpolatedHeights = new Int32Array(32 * 32);
-    const Min4s = new Int32Array(16);
-    const Max4s = new Int32Array(16);
-    const GroundTypes = new Uint32Array([2, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3]);
-    const EmptyCube = new Uint32Array(4096);
-
-
-    const HeightDataOffset = this.u32[M.I_HEIGHT_DATA_INDEX];
     let FreeCubeIndex = 0;
 
     const Children128HeapIndex = (this.Children128SegmentAndStackIndex & ~65535) | this.u32[this.Children128SegmentAndStackIndex];
@@ -93,15 +83,15 @@ class WorkerMain{
 
     for(let z16 = 0; z16 < 8; ++z16){
       for(let x16 = 0; x16 < 8; ++x16){
-        const HeightMM = this.f32[HeightDataOffset + (((z128 << 11) + (z16 << 8)) | ((x128 << 3) + x16))];
-        const HeightM0 = this.f32[HeightDataOffset + (((z128 << 11) + (z16 << 8)) | ((x128 << 3) + (x16 + 1)))];
-        const HeightMP = this.f32[HeightDataOffset + (((z128 << 11) + (z16 << 8)) | ((x128 << 3) + (x16 + 2)))];
-        const Height0M = this.f32[HeightDataOffset + (((z128 << 11) + ((z16 + 1) << 8)) | ((x128 << 3) + x16))];
-        const Height00 = this.f32[HeightDataOffset + (((z128 << 11) + ((z16 + 1) << 8)) | ((x128 << 3) + (x16 + 1)))];
-        const Height0P = this.f32[HeightDataOffset + (((z128 << 11) + ((z16 + 1) << 8)) | ((x128 << 3) + (x16 + 2)))];
-        const HeightPM = this.f32[HeightDataOffset + (((z128 << 11) + ((z16 + 2) << 8)) | ((x128 << 3) + x16))];
-        const HeightP0 = this.f32[HeightDataOffset + (((z128 << 11) + ((z16 + 2) << 8)) | ((x128 << 3) + (x16 + 1)))];
-        const HeightPP = this.f32[HeightDataOffset + (((z128 << 11) + ((z16 + 2) << 8)) | ((x128 << 3) + (x16 + 2)))];
+        const HeightMM = Heights[((z128 << 11) + (z16 << 8)) | ((x128 << 3) + x16)];
+        const HeightM0 = Heights[((z128 << 11) + (z16 << 8)) | ((x128 << 3) + (x16 + 1))];
+        const HeightMP = Heights[((z128 << 11) + (z16 << 8)) | ((x128 << 3) + (x16 + 2))];
+        const Height0M = Heights[((z128 << 11) + ((z16 + 1) << 8)) | ((x128 << 3) + x16)];
+        const Height00 = Heights[((z128 << 11) + ((z16 + 1) << 8)) | ((x128 << 3) + (x16 + 1))];
+        const Height0P = Heights[((z128 << 11) + ((z16 + 1) << 8)) | ((x128 << 3) + (x16 + 2))];
+        const HeightPM = Heights[((z128 << 11) + ((z16 + 2) << 8)) | ((x128 << 3) + x16)];
+        const HeightP0 = Heights[((z128 << 11) + ((z16 + 2) << 8)) | ((x128 << 3) + (x16 + 1))];
+        const HeightPP = Heights[((z128 << 11) + ((z16 + 2) << 8)) | ((x128 << 3) + (x16 + 2))];
 
 
         for(let z = 0; z < 9; ++z) for(let x = 0; x < 9; ++x){
@@ -174,7 +164,7 @@ class WorkerMain{
           const FreeCubeIndicesHeapIndex = (this.FreeCubeIndicesSegmentAndStackIndex & ~65535) | this.u32[this.FreeCubeIndicesSegmentAndStackIndex];
           let CubeSegmentAndStackIndex = this.u32[FreeCubeIndicesHeapIndex + 2 + FreeCubeIndex];
           if(CubeSegmentAndStackIndex === 0){
-            CubeSegmentAndStackIndex = this.Memory.Allocate(4130, true);//self.WasmInstance.exports.Allocate(4130, true);
+            CubeSegmentAndStackIndex = this.Memory.Allocate(4130, true);
             this.u32[FreeCubeIndicesHeapIndex + 2 + FreeCubeIndex] = CubeSegmentAndStackIndex;
           }
           FreeCubeIndex++;
@@ -225,8 +215,6 @@ class WorkerMain{
                   Children128SegmentArray[Children128HeapIndex + 2 + (z16 << 6 | y16 << 3 | x16)] = CubeSegmentAndStackIndex;
                   NonEmptyChildrenCount++;
                   FreeCubeIndex++;
-
-
                   const CubeSegmentIndex = CubeSegmentAndStackIndex >> 16;
                   const CubeStackIndex = CubeSegmentAndStackIndex & 65535;
                   CubeSegmentArray = this.MemorySegments_u32[CubeSegmentIndex];
@@ -241,17 +229,15 @@ class WorkerMain{
                   CubeSegmentArray[CubeHeapIndex + 4098 + i] = 0;
                   CubeSegmentArray[CubeHeapIndex + 4114 + i] = 15;
                 }
-
               }
               CubeSegmentArray[CubeHeapIndex + 2 + (z1 << 8 | y1 << 4 | x1)] = 3;
-
             }
           }
         }
       }
     }*/
 
-    const Allocation128SegmentAndStackIndex = this.Memory.Allocate(531 + NonEmptyChildrenCount, false);//self.WasmInstance.exports.Allocate(531 + NonEmptyChildrenCount, false);
+    const Allocation128SegmentAndStackIndex = this.Memory.Allocate(531 + NonEmptyChildrenCount, false);
     const Allocation128HeapIndex = (Allocation128SegmentAndStackIndex & ~65535) | this.u32[Allocation128SegmentAndStackIndex];
     for(let i = 2; i < 530; ++i) this.u32[Allocation128HeapIndex + i] = 0;
 
@@ -383,7 +369,7 @@ class WorkerMain{
 
       const TempRLEHeapIndex = (this.TempRLESegmentAndStackIndex & ~65535) | this.u32[this.TempRLESegmentAndStackIndex];
 
-      self.WasmInstance.exports.SetClear(this.TypesSetSSI);
+      this.TypesSet.Clear();
 
       for(let i = 0; i < 16; ++i) this.u32[TempRLEHeapIndex + 8194 + i] = 0;
 
@@ -421,7 +407,7 @@ class WorkerMain{
                   this.u32[CubeHeapIndex + 2 + ((z1 + 1) << 8 | y1 << 4 | x1)] === 0*/
                 ){
                   if(CurrentType === 0) CurrentType = Type;
-                  if((LayerItems === 0 || CurrentType !== Type)) self.WasmInstance.exports.SetAdd(this.TypesSetSSI, Type);
+                  if((LayerItems === 0 || CurrentType !== Type)) this.TypesSet.Add(Type);
                   if(CurrentType !== Type){
                     this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | LayerItems << 1 | 0)] = CurrentType;
                     this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | LayerItems << 1 | 1)] = (z4 << 6 | z1 << 4 | x4 << 2 | x1) - 1; //-1 is so that it's in the range [0, 255] instead of [1, 256]
@@ -441,16 +427,16 @@ class WorkerMain{
         this.u32[TempRLEHeapIndex + 2 + (8192 | y1)] = LayerItems; //Will be 0 if this column was just air
       }
 
-      if(self.WasmInstance.exports.SetSize(this.TypesSetSSI) === 0) continue; //TODO: Maybe this is bad?
+      if(this.TypesSet.Size() === 0) continue; //TODO: Maybe this is bad?
 
 
-      const TypeCount = self.WasmInstance.exports.SetSize(this.TypesSetSSI);
+      const TypeCount = this.TypesSet.Size();
       const RLEOffset = AllocationTemplateHeapIndex + TotalAllocations + 8;
 
       let CurrentIndex = 0;
       this.u32[RLEOffset + CurrentIndex++] = TypeCount;
 
-      const I_ItemsList = self.WasmInstance.exports.SetItemsListOffset(this.TypesSetSSI);
+      const I_ItemsList = this.TypesSet.ItemsListOffset();
 
       if(TypeCount === 1){
         this.u32[RLEOffset + CurrentIndex++] = this.u32[I_ItemsList];
@@ -473,7 +459,7 @@ class WorkerMain{
             if(Length === 0) continue; //Has no RLE data or is completely empty
 
             for(let i = 0; i < Length; ++i, ++LocalOffset){
-              this.u32[RLEOffset + CurrentIndex] |= self.WasmInstance.exports.SetGet(this.TypesSetSSI, this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | i << 1)]) << (LocalOffset & 31);
+              this.u32[RLEOffset + CurrentIndex] |= this.TypesSet.Get(this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | i << 1)]) << (LocalOffset & 31);
               if((LocalOffset & 31) === 31){
                 CurrentIndex++;
                 this.u32[RLEOffset + CurrentIndex] = 0;
@@ -488,7 +474,7 @@ class WorkerMain{
             if(Length === 0) continue; //Has no RLE data or is completely empty
 
             for(let i = 0; i < Length; ++i, ++LocalOffset){
-              this.u32[RLEOffset + CurrentIndex] |= self.WasmInstance.exports.SetGet(this.TypesSetSSI, this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | i << 1)]) << ((LocalOffset & 15) << 1);
+              this.u32[RLEOffset + CurrentIndex] |= this.TypesSet.Get(this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | i << 1)]) << ((LocalOffset & 15) << 1);
               if((LocalOffset & 15) === 15){
                 CurrentIndex++;
                 this.u32[RLEOffset + CurrentIndex] = 0;
@@ -503,7 +489,7 @@ class WorkerMain{
             if(Length === 0) continue; //Has no RLE data or is completely empty
 
             for(let i = 0; i < Length; ++i, ++LocalOffset){
-              this.u32[RLEOffset + CurrentIndex] |= self.WasmInstance.exports.SetGet(this.TypesSetSSI, this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | i << 1)]) << ((LocalOffset & 7) << 2);
+              this.u32[RLEOffset + CurrentIndex] |= this.TypesSet.Get(this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | i << 1)]) << ((LocalOffset & 7) << 2);
               if((LocalOffset & 7) === 7){
                 CurrentIndex++;
                 this.u32[RLEOffset + CurrentIndex] = 0;
@@ -518,7 +504,7 @@ class WorkerMain{
             if(Length === 0) continue; //Has no RLE data or is completely empty
 
             for(let i = 0; i < Length; ++i, ++LocalOffset){
-              this.u32[RLEOffset + CurrentIndex] |= self.WasmInstance.exports.SetGet(this.TypesSetSSI, this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | i << 1)]) << ((LocalOffset & 3) << 3);
+              this.u32[RLEOffset + CurrentIndex] |= this.TypesSet.Get(this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | i << 1)]) << ((LocalOffset & 3) << 3);
               if((LocalOffset & 3) === 3){
                 CurrentIndex++;
                 this.u32[RLEOffset + CurrentIndex] = 0;
@@ -533,7 +519,7 @@ class WorkerMain{
             if(Length === 0) continue; //Has no RLE data or is completely empty
 
             for(let i = 0; i < Length; ++i, ++LocalOffset){
-              this.u32[RLEOffset + CurrentIndex] |= self.WasmInstance.exports.SetGet(this.TypesSetSSI, this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | i << 1)]) << ((LocalOffset & 1) << 4);
+              this.u32[RLEOffset + CurrentIndex] |= this.TypesSet.Get(this.u32[TempRLEHeapIndex + 2 + (y1 << 9 | i << 1)]) << ((LocalOffset & 1) << 4);
               if((LocalOffset & 1) === 1){
                 CurrentIndex++;
                 this.u32[RLEOffset + CurrentIndex] = 0;
@@ -580,7 +566,7 @@ class WorkerMain{
       //Copy memory to permanent allocation
       const AllocationSize = TotalAllocations + CurrentIndex + 8;
 
-      const PermanentAllocationSegmentAndStackIndex = this.Memory.Allocate(AllocationSize, false);//self.WasmInstance.exports.Allocate(AllocationSize, false);
+      const PermanentAllocationSegmentAndStackIndex = this.Memory.Allocate(AllocationSize, false);
       const PermanentAllocationHeapIndex = (PermanentAllocationSegmentAndStackIndex & ~65535) | this.u32[PermanentAllocationSegmentAndStackIndex];
 
 
@@ -589,8 +575,7 @@ class WorkerMain{
       }
 
 
-      //this.Memory.RequestGPUUpload(PermanentAllocationSegmentAndStackIndex);
-      self.WasmInstance.exports.RequestGPUUpload(PermanentAllocationSegmentAndStackIndex);
+      this.Memory.RequestGPUUpload(PermanentAllocationSegmentAndStackIndex >> 16, PermanentAllocationSegmentAndStackIndex & 65535);
       Atomics.sub(this.u32, (PermanentAllocationSegmentAndStackIndex & ~65535) | M.I_USAGE_COUNTER, 1);
 
       Atomics.add(this.u32, M.I_INFO_LOADED_CUBES_COUNTER, 1);
@@ -599,8 +584,7 @@ class WorkerMain{
       this.u32[Allocation128HeapIndex + 2 + 16 + (z16 << 6 | y16 << 3 | x16)] = PermanentAllocationSegmentAndStackIndex;
     }
 
-    //this.Memory.RequestGPUUpload(Allocation128SegmentAndStackIndex);
-    self.WasmInstance.exports.RequestGPUUpload(Allocation128SegmentAndStackIndex);
+    this.Memory.RequestGPUUpload(Allocation128SegmentAndStackIndex >> 16, Allocation128SegmentAndStackIndex & 65535);
     Atomics.sub(this.u32, (Allocation128SegmentAndStackIndex & ~65535) | M.I_USAGE_COUNTER, 1);
 
     this.u32[this.u32[M.I_WORLD_GRID_INDEX] + (0 << 15 | z128 << 10 | y128 << 5 | x128)] = Allocation128SegmentAndStackIndex;
@@ -610,14 +594,6 @@ class WorkerMain{
     Atomics.or(this.u32, this.u32[M.I_WORLD_GRID_INFO_INDEX] + (0 << 13 | z128 << 8 | y128 << 3 | x128 >> 2), M.MASK_GENERATED << ((x128 & 3) << 3));
 
     self.Times[z128 << 5 | x128] = self.performance.now();
-
-    const FreeCubeIndicesHeapIndex = (this.FreeCubeIndicesSegmentAndStackIndex & ~65535) | this.u32[this.FreeCubeIndicesSegmentAndStackIndex];
-    /*for(let i = 0; i < FreeCubeIndex; ++i){
-      const SSI = this.u32[FreeCubeIndicesHeapIndex + 2 + i];
-      Atomics.sub(this.u32, (SSI & 0xffff0000) | M.I_USAGE_COUNTER, 1);
-      this.Memory.Deallocate(SSI);
-    }*/
-    //Atomics.sub(this.u32, (this.FreeCubeIndicesSegmentAndStackIndex & 0xffff0000) | M.I_USAGE_COUNTER, 1);
   }
 }
 self.iWorkerMain = null;
@@ -625,7 +601,6 @@ self.WasmInstance = null;
 self.onmessage = function(Event){
   const Data = Event.data;
   if(Data.Request === W.INITIALISE){
-    self.WasmInstance = new WebAssembly.Instance(WasmModule, {console, "Main": {"MemoryBuffer": Data.WasmMemory}});
     self.iWorkerMain = new WorkerMain(Data);
   } else{
     self.iWorkerMain[Data.Request](Data);
