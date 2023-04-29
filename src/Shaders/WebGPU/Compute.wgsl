@@ -17,15 +17,20 @@ struct UniformsStruct{
 
 struct AtomicIndicesStruct{
   TileInfoIndex : atomic<u32>,
-  Quads : atomic<u32>,
-  RenderList : atomic<u32>
+  Fails : atomic<u32>,
+  Empty1 : atomic<u32>,
+  Empty2 : atomic<u32>
 }
+
+const TileInfoSize : u32 = 126u;
 
 struct TileInfoStruct{
   Index : atomic<u32>,
-  NextTileInfo : u32,
-  Tiles : array<u32, 30>
+  TileID : atomic<u32>,
+  Tiles : array<u32, TileInfoSize>
 }
+
+
 
 
 @binding(0) @group(0) var<storage, read> Data: array<u32>;
@@ -35,8 +40,7 @@ struct TileInfoStruct{
 @binding(4) @group(0) var<storage, read> RenderListBuffer : array<u32>;
 @binding(5) @group(0) var<storage, read_write> TileInfo : array<TileInfoStruct>;
 @binding(6) @group(0) var<storage, read_write> WriteBuffer : array<vec4<u32>>;
-@binding(7) @group(0) var<storage, read_write> TilesStartW : array<u32>;
-@binding(8) @group(0) var<storage, read> TilesStartR : array<u32>;
+@binding(7) @group(0) var<storage, read_write> TilesStart : array<atomic<u32>>;
 
 const Font = array<vec2<u32>, 16>(
   vec2<u32>(0x3636361cu, 0x1c363636u),
@@ -86,6 +90,10 @@ fn RotateY(a : f32) -> mat3x3<f32>{
     0., 1.,0.,
     -s, 0., c
   );
+}
+
+fn TileHash(x : u32) -> u32{
+  return 1717367974u ^ (x * 295559667u);
 }
 
 fn GenerateBoundingRects(LocalInvocationIndex : u32, WorkgroupID : vec3<u32>){
@@ -158,16 +166,34 @@ fn GenerateBoundingRects(LocalInvocationIndex : u32, WorkgroupID : vec3<u32>){
   let XSize = (u32(Uniforms.Resolution.x) + 15) >> 4;
   for(var x16 = Min16.x; x16 < Max16.x; x16++){
     for(var y16 = Min16.y; y16 < Max16.y; y16++){
-      let TilesGroup = TilesStartW[y16 * XSize + x16];
+      let TileID = y16 * XSize + x16;
+      var TilesGroup = TileID;//atomicLoad(&TilesStart[TileID]);
       var TilesIndex = atomicAdd(&TileInfo[TilesGroup].Index, 1);
-      if(TilesIndex == 0){
 
-      } else if(TilesIndex == 30){
-        atomicAdd(&AtomicIndices.TileInfoIndex, 1);
+      if(TilesIndex >= TileInfoSize){
+        for(var i = 0u; i < 26; i++){
+          //atomicMax(&AtomicIndices.Fails, i);
+          let OldTilesGroup = TilesGroup;
+
+          TilesGroup = TileHash(TilesGroup);
+          if((TilesGroup & 65535) < 8192){
+            continue;
+          }
+          let Pointer = &TileInfo[TilesGroup & 65535].TileID;
+          atomicCompareExchangeWeak(Pointer, 0xffffffffu, TileID);
+          if(atomicLoad(Pointer) != TileID){
+            continue;
+          }
+          TilesIndex = atomicAdd(&TileInfo[TilesGroup & 65535].Index, 1);
+          if(TilesIndex >= TileInfoSize){
+            continue;
+          }
+          //atomicCompareExchangeWeak(&TilesStart[TileID], OldTilesGroup, TilesGroup);
+          break;
+        }
       }
-      if(TilesIndex < 30){
-        TileInfo[TilesGroup].Tiles[TilesIndex] = (((InstanceID - InstancesStart) & 511) << 19) | Region128_Coordinate;
-      }
+
+      TileInfo[TilesGroup & 65535u].Tiles[TilesIndex] = (((InstanceID - InstancesStart) & 511) << 19) | Region128_Coordinate;
     }
   }
 }
@@ -193,6 +219,7 @@ fn ApplyFont(Pixel : vec2<u32>, Number : u32) -> bool{
 }
 
 var<workgroup> SharedTilesCount : u32;
+var<workgroup> SharedTileIndex : u32;
 
 @compute @workgroup_size(16, 16, 1)
 fn TileProcessingMain(
@@ -204,13 +231,8 @@ fn TileProcessingMain(
   loop{
     let XSize = (u32(Uniforms.Resolution.x) + 15) >> 4;
     var TileIndex = WorkgroupID.y * XSize + WorkgroupID.x;
-    if(LocalInvocationIndex == 0u){
-      SharedTilesCount = atomicLoad(&TileInfo[TileIndex].Index);
-    }
-    workgroupBarrier();
-    let TilesCount = workgroupUniformLoad(&SharedTilesCount);
+    let TileID = WorkgroupID.y * XSize + WorkgroupID.x;
 
-    let Iterations = min(TilesCount, 30u);
 
     let FloatPixel = vec2<f32>(Pixel.xy) / Uniforms.Resolution;
     let RayDirection = mix(mix(Uniforms.RayDirectionHL, Uniforms.RayDirectionLL, FloatPixel.x), mix(Uniforms.RayDirectionHH, Uniforms.RayDirectionLH, FloatPixel.x), FloatPixel.y);
@@ -221,64 +243,100 @@ fn TileProcessingMain(
     var Colour = vec4<f32>(0., 0., 0., 1.);//saturate(vec4<f32>((f32(TilesCount) - 64.) / 32., (f32(TilesCount) - 32) / 32., f32(TilesCount) / 32., 1.));
     var Depth = 3.4028234e38;
 
-    for(var i = 0u; i < Iterations; i++){
-      //workgroupBarrier();
-      let Info = TileInfo[TileIndex].Tiles[i];
-      let Region128_Coordinate = Info & 524287;
-      let Region16Index = (Info >> 19) & 511;
 
-      let Region128_SSI = Data[65536u + Region128_Coordinate];
-      let Region128_HI = (Region128_SSI & ~65535u) | Data[Region128_SSI];
-
-      let Position128 = vec3<f32>((vec3<u32>(Region128_Coordinate) >> vec3<u32>(0, 5, 10)) & vec3<u32>(31u)) * 128.;
-
-
-      let Region16_Coordinate = Data[Region128_HI + 531u + Region16Index];
-      let Region16_SSI = Data[Region128_HI + 18u + Region16_Coordinate];
-
-      let Region16_HI = (Region16_SSI & ~65535u) | Data[Region16_SSI];
-      let Region16_Position = Data[Region16_HI + 3u] & 511u;
-
-      let Temp = Data[Region16_HI + 2u];
-      let Min_u = vec3<u32>(Temp, Temp >> 4, Temp >> 8) & vec3<u32>(15u);
-      let Max_u = (vec3<u32>(Temp >> 12, Temp >> 16, Temp >> 20) & vec3<u32>(15u)) + vec3<u32>(1u);
-
-      let Position = Position128 + vec3<f32>((vec3<u32>(Region16_Position) >> vec3<u32>(0, 3, 6)) & vec3<u32>(7)) * 16.;
-      let MinPos = Position + vec3<f32>(Min_u);
-      let MaxPos = Position + vec3<f32>(Max_u);
-
-      let InverseCuboidSize = 1. / (MaxPos - MinPos);
-      let PositionOffset = Uniforms.CameraPosition - MinPos;
-
-      let MinPosMinusRayOrigin = MinPos - Uniforms.CameraPosition;
-      let MaxPosMinusRayOrigin = MaxPos - Uniforms.CameraPosition;
-
-      let t024 = MinPosMinusRayOrigin * InverseRayDirection;
-      let t135 = MaxPosMinusRayOrigin * InverseRayDirection;
-
-      let ComponentMin = min(t024, t135);
-      let ComponentMax = max(t024, t135);
-
-      let tmin = max(max(ComponentMin.x, ComponentMin.y), ComponentMin.z);
-      let tmax = min(min(ComponentMax.x, ComponentMax.y), ComponentMax.z);
-
-      let Hit = tmax >= 0 && tmin <= tmax;
-
-      let HitCoordinate = (PositionOffset + tmin * RayDirection) * InverseCuboidSize;
-
-
-
-      if(Hit){
-        Done = true;
-        if(tmin < Depth){
-          Depth = tmin;
-          Colour = vec4<f32>(HitCoordinate.xyz, 1.);
-        }
-      }
+    if(LocalInvocationIndex == 0u){
+      SharedTilesCount = atomicLoad(&TileInfo[TileIndex].Index);
     }
     workgroupBarrier();
-    if(((Uniforms.DebugFlags >> 0) & 1u) == 1u){
-      if(TilesCount >= 30){
+    var TilesCount = workgroupUniformLoad(&SharedTilesCount);
+
+    var Iterations = min(TilesCount, TileInfoSize);
+
+
+
+    for(var h = 0u; h < 26u; h++){
+
+      for(var i = 0u; i < Iterations; i++){
+        let Info = TileInfo[TileIndex & 65535u].Tiles[i];
+        let Region128_Coordinate = Info & 524287;
+        let Region16Index = (Info >> 19) & 511;
+
+        let Region128_SSI = Data[65536u + Region128_Coordinate];
+        let Region128_HI = (Region128_SSI & ~65535u) | Data[Region128_SSI];
+
+        let Position128 = vec3<f32>((vec3<u32>(Region128_Coordinate) >> vec3<u32>(0, 5, 10)) & vec3<u32>(31u)) * 128.;
+
+
+        let Region16_Coordinate = Data[Region128_HI + 531u + Region16Index];
+        let Region16_SSI = Data[Region128_HI + 18u + Region16_Coordinate];
+
+        let Region16_HI = (Region16_SSI & ~65535u) | Data[Region16_SSI];
+        let Region16_Position = Data[Region16_HI + 3u] & 511u;
+
+        let Temp = Data[Region16_HI + 2u];
+        let Min_u = vec3<u32>(Temp, Temp >> 4, Temp >> 8) & vec3<u32>(15u);
+        let Max_u = (vec3<u32>(Temp >> 12, Temp >> 16, Temp >> 20) & vec3<u32>(15u)) + vec3<u32>(1u);
+
+        let Position = Position128 + vec3<f32>((vec3<u32>(Region16_Position) >> vec3<u32>(0, 3, 6)) & vec3<u32>(7)) * 16.;
+        let MinPos = Position + vec3<f32>(Min_u);
+        let MaxPos = Position + vec3<f32>(Max_u);
+
+        let InverseCuboidSize = 1. / (MaxPos - MinPos);
+        let PositionOffset = Uniforms.CameraPosition - MinPos;
+
+        let MinPosMinusRayOrigin = MinPos - Uniforms.CameraPosition;
+        let MaxPosMinusRayOrigin = MaxPos - Uniforms.CameraPosition;
+
+        let t024 = MinPosMinusRayOrigin * InverseRayDirection;
+        let t135 = MaxPosMinusRayOrigin * InverseRayDirection;
+
+        let ComponentMin = min(t024, t135);
+        let ComponentMax = max(t024, t135);
+
+        let tmin = max(max(ComponentMin.x, ComponentMin.y), ComponentMin.z);
+        let tmax = min(min(ComponentMax.x, ComponentMax.y), ComponentMax.z);
+
+        let Hit = tmax >= 0 && tmin <= tmax;
+
+        let HitCoordinate = (PositionOffset + tmin * RayDirection) * InverseCuboidSize;
+
+
+
+        if(Hit){
+          Done = true;
+          if(tmin < Depth){
+            Depth = tmin;
+            Colour = vec4<f32>(HitCoordinate.xyz, 1.);
+          }
+        }
+      }
+
+
+      if(TilesCount <= TileInfoSize){
+        break;
+      }
+
+
+      if(LocalInvocationIndex == 0u){
+        for(var j = 0u; j < 10; j++){
+          TileIndex = TileHash(TileIndex);
+          if(TileID == atomicLoad(&TileInfo[TileIndex & 65535u].TileID)){
+            break;
+          }
+        }
+        SharedTilesCount = atomicLoad(&TileInfo[TileIndex & 65535u].Index);
+        SharedTileIndex = TileIndex;
+      }
+      workgroupBarrier();
+      TilesCount = workgroupUniformLoad(&SharedTilesCount);
+      TileIndex = workgroupUniformLoad(&SharedTileIndex);
+
+      Iterations = min(TilesCount, TileInfoSize);
+    }
+    workgroupBarrier();
+
+    if(((Uniforms.DebugFlags >> 0) & 1u) == 1u && TilesCount > 0){
+      if(TilesCount >= TileInfoSize){
         Colour = vec4<f32>(Colour.x, Colour.yz * .5, 1.);
       }
       if(ApplyFont(LocalInvocationID.xy, TilesCount)){
@@ -300,7 +358,7 @@ fn TileProcessingMain(
 
 @compute @workgroup_size(16, 16)
 fn ClearBufferMain(@builtin(workgroup_id) ID : vec3<u32>, @builtin(local_invocation_index) Index : u32){
-  WriteBuffer[(ID.y << 16) | (ID.x << 8) | Index] = vec4<u32>(0);
+  WriteBuffer[(ID.y << 16) | (ID.x << 8) | Index] = vec4<u32>(0, 0xffffffffu, 0xffffffffu, 0xffffffffu); //This is really stupid
 }
 
 @compute @workgroup_size(16, 16)

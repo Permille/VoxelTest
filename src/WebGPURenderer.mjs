@@ -195,7 +195,7 @@ export default class WebGPURenderer{
           }
         },
         {
-          "binding": 8,
+          "binding": 7,
           "visibility": GPUShaderStage.COMPUTE,
           "buffer": {
             "type": "read-only-storage"
@@ -376,7 +376,7 @@ export default class WebGPURenderer{
       "usage": GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     });
 
-    this.TilesStartBufferSize = 4 << (32 - Math.clz32(((Width + 7) >> 3) * ((Height + 7) >> 3) - 1));
+    this.TilesStartBufferSize = 4 << (32 - Math.clz32(((Width + 15) >> 4) * ((Height + 15) >> 4) - 1));
     if(this.TilesStartBuffer !== null) this.TilesStartBuffer.destroy();
     this.TilesStartBuffer = this.Device.createBuffer({
       "size": this.TilesStartBufferSize,
@@ -467,7 +467,7 @@ export default class WebGPURenderer{
           }
         },
         {
-          "binding": 8,
+          "binding": 7,
           "resource": {
             "buffer": this.TilesStartBuffer
           }
@@ -646,7 +646,7 @@ export default class WebGPURenderer{
 
 
 
-    this.Device.queue.writeBuffer(this.AtomicListIndicesBuffer, 0, new ArrayBuffer(16), 0, 16);
+    this.Device.queue.writeBuffer(this.AtomicListIndicesBuffer, 0, new Uint32Array([this.TilesStartBufferSize >> 2, 0, 0, 0]), 0, 4);
 
 
     const RasterizationPassEncoder = CommandEncoder.beginComputePass();

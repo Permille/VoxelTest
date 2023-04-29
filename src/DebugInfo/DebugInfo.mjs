@@ -15,7 +15,7 @@ export default class DebugInfo{
     await InitialisedMain;
     AddEventListener(Main.Renderer.Events, "BeforeRender", function(){
       const Now = window.performance.now();
-      if(Math.floor(this.LastUpdate / 1000.) === Math.floor(Now / 1000.)) return;
+      //if(Math.floor(this.LastUpdate / 1000.) === Math.floor(Now / 1000.)) return;
       this.LastUpdate = Now;
       this.Update();
     }.bind(this));
