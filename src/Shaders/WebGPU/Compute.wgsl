@@ -22,11 +22,13 @@ struct AtomicIndicesStruct{
   Empty2 : atomic<u32>
 }
 
-const TileInfoSize : u32 = 126u;
+const TileInfoSize : u32 = 125u;
+const MaxTileSearchIterations : u32 = 26u;
 
 struct TileInfoStruct{
-  Index : atomic<u32>,
-  TileID : atomic<u32>,
+  Index : atomic<u32>, //Should be initialised to 0
+  TileID : atomic<u32>, //Should be initialised to 0xffffffff
+  TileGroupID : atomic<u32>, //Should be initialised to 0xffffffff
   Tiles : array<u32, TileInfoSize>
 }
 
@@ -169,9 +171,9 @@ fn GenerateBoundingRects(LocalInvocationIndex : u32, WorkgroupID : vec3<u32>){
       let TileID = y16 * XSize + x16;
       var TilesGroup = TileID;//atomicLoad(&TilesStart[TileID]);
       var TilesIndex = atomicAdd(&TileInfo[TilesGroup].Index, 1);
-
+      var TileGroupID : u32 = 0u;
       if(TilesIndex >= TileInfoSize){
-        for(var i = 0u; i < 26; i++){
+        for(var i = 0u; i < MaxTileSearchIterations; i++){
           //atomicMax(&AtomicIndices.Fails, i);
           let OldTilesGroup = TilesGroup;
 
@@ -182,6 +184,11 @@ fn GenerateBoundingRects(LocalInvocationIndex : u32, WorkgroupID : vec3<u32>){
           let Pointer = &TileInfo[TilesGroup & 65535].TileID;
           atomicCompareExchangeWeak(Pointer, 0xffffffffu, TileID);
           if(atomicLoad(Pointer) != TileID){
+            continue;
+          }
+          TileGroupID++;
+          let GroupID = atomicMin(&TileInfo[TilesGroup & 65535].TileGroupID, TileGroupID); //This makes sure that I'm not trying to write to existing tile groups for this type
+          if(GroupID < TileGroupID){
             continue;
           }
           TilesIndex = atomicAdd(&TileInfo[TilesGroup & 65535].Index, 1);
@@ -220,6 +227,8 @@ fn ApplyFont(Pixel : vec2<u32>, Number : u32) -> bool{
 
 var<workgroup> SharedTilesCount : u32;
 var<workgroup> SharedTileIndex : u32;
+var<workgroup> SharedTest : u32;
+var<workgroup> SharedShouldContinue : bool;
 
 @compute @workgroup_size(16, 16, 1)
 fn TileProcessingMain(
@@ -232,6 +241,7 @@ fn TileProcessingMain(
     let XSize = (u32(Uniforms.Resolution.x) + 15) >> 4;
     var TileIndex = WorkgroupID.y * XSize + WorkgroupID.x;
     let TileID = WorkgroupID.y * XSize + WorkgroupID.x;
+    var TileGroupID : u32 = 0u;
 
 
     let FloatPixel = vec2<f32>(Pixel.xy) / Uniforms.Resolution;
@@ -254,8 +264,34 @@ fn TileProcessingMain(
 
 
 
-    for(var h = 0u; h < 26u; h++){
+    var h = 0u;
+    for(; h < MaxTileSearchIterations; h++){
+      if(h > 0){
+        if(LocalInvocationIndex == 0u){
+          SharedShouldContinue = false;
+          TileIndex = TileHash(TileIndex);
+          if(TileID == atomicLoad(&TileInfo[TileIndex & 65535u].TileID)){
+            TileGroupID++;
+            if(atomicLoad(&TileInfo[TileIndex & 65535u].TileGroupID) != TileGroupID){ //This confirms that this is the next part of the list
+              SharedShouldContinue = true;
+              SharedTest++;
+            }
+          } else{
+            SharedShouldContinue = true;
+            SharedTest++;
+          }
+          SharedTilesCount = atomicLoad(&TileInfo[TileIndex & 65535u].Index);
+          SharedTileIndex = TileIndex;
+        }
+        workgroupBarrier();
+        if(workgroupUniformLoad(&SharedShouldContinue)){
+          continue;
+        }
+        TilesCount = workgroupUniformLoad(&SharedTilesCount);
+        TileIndex = workgroupUniformLoad(&SharedTileIndex);
 
+        Iterations = min(TilesCount, TileInfoSize);
+      }
       for(var i = 0u; i < Iterations; i++){
         let Info = TileInfo[TileIndex & 65535u].Tiles[i];
         let Region128_Coordinate = Info & 524287;
@@ -317,29 +353,17 @@ fn TileProcessingMain(
       }
 
 
-      if(LocalInvocationIndex == 0u){
-        for(var j = 0u; j < 10; j++){
-          TileIndex = TileHash(TileIndex);
-          if(TileID == atomicLoad(&TileInfo[TileIndex & 65535u].TileID)){
-            break;
-          }
-        }
-        SharedTilesCount = atomicLoad(&TileInfo[TileIndex & 65535u].Index);
-        SharedTileIndex = TileIndex;
-      }
-      workgroupBarrier();
-      TilesCount = workgroupUniformLoad(&SharedTilesCount);
-      TileIndex = workgroupUniformLoad(&SharedTileIndex);
 
-      Iterations = min(TilesCount, TileInfoSize);
+
+
     }
     workgroupBarrier();
 
-    if(((Uniforms.DebugFlags >> 0) & 1u) == 1u && TilesCount > 0){
-      if(TilesCount >= TileInfoSize){
+    if(((Uniforms.DebugFlags >> 0) & 1u) == 1u && h > 0u){
+      if(h == MaxTileSearchIterations){
         Colour = vec4<f32>(Colour.x, Colour.yz * .5, 1.);
       }
-      if(ApplyFont(LocalInvocationID.xy, TilesCount)){
+      if(ApplyFont(LocalInvocationID.xy, h - workgroupUniformLoad(&SharedTest))){
         Colour = vec4<f32>(1.);
       } else{
         Colour = vec4<f32>((Colour.xyz) * .7, 1.);
