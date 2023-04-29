@@ -32,6 +32,18 @@ struct TileInfoStruct{
   Tiles : array<u32, TileInfoSize>
 }
 
+struct RaytraceResult16{
+  HitVoxel : bool,
+  RayPosOffset : vec3<i32>,
+  FloatMask : vec3<f32>,
+}
+
+struct RaytraceResult4{
+  HitVoxel : bool,
+  RayPosFloor : vec3<i32>,
+  FloatMask : vec3<f32>
+}
+
 
 
 
@@ -211,6 +223,140 @@ fn RasterizationMain(@builtin(local_invocation_id) LocalInvocationID : vec3<u32>
 }
 
 
+var<private> i_Min : vec3<i32>;
+var<private> i_Max : vec3<i32>;
+var<private> f_Min : vec3<f32>;
+var<private> f_Max : vec3<f32>;
+var<private> RayDirection : vec3<f32>;
+var<private> RayDirection_Flat : vec3<f32>;
+var<private> Distance : f32;
+var<private> RayInverse : vec3<f32>;
+var<private> AbsRayInverse : vec3<f32>;
+var<private> RayInverse_Flat : vec3<f32>;
+var<private> AbsRayInverse_Flat : vec3<f32>;
+var<private> RaySign : vec3<f32>;
+var<private> i_RaySign : vec3<i32>;
+var<private> HalfRaySignPlusHalf : vec3<f32>;
+
+
+var<private> L0Bits4 : u32;
+var<private> L1Bits4 : u32;
+var<private> L2Bits4 : u32;
+var<private> L3Bits4 : u32;
+var<private> CurrentBits4 : u32;
+var<private> Bits1 : u32;
+var<private> CompressedAllocations : u32;
+var<private> Bits1Start : u32;
+
+fn IsSolid4(c : vec3<i32>) -> bool{
+  return (Bits1 & (1u << u32((c.y << 4) | (c.z << 2) | c.x))) != 0u;
+}
+
+fn IsSolid16(c : vec3<i32>) -> bool{
+  return (CurrentBits4 & (1u << u32(((c.y & 1) << 4) | (c.z << 2) | c.x))) != 0u;
+}
+
+fn Raytrace4(p_RayOrigin : vec3<f32>, p_FloatMask : vec3<f32>) -> RaytraceResult4{
+  var RayOrigin = p_RayOrigin;
+  var FloatMask = p_FloatMask;
+  var i_RayPosFloor = vec3<i32>(RayOrigin);
+  var SideDistance = (HalfRaySignPlusHalf - fract(RayOrigin)) * RayInverse;
+
+  for(var i = 0; i < 8; i++){
+    if(IsSolid4(i_RayPosFloor)){
+      return RaytraceResult4(true, i_RayPosFloor, FloatMask);
+    }
+    FloatMask = step(SideDistance, min(SideDistance.yxy, SideDistance.zzx));
+    i_RayPosFloor += vec3<i32>(FloatMask * RaySign);
+    //any(bvec3(i_RayPosFloor & ~ivec3(3, 1, 3))) works too
+    if((((i_RayPosFloor.x | i_RayPosFloor.z) & ~3) | (i_RayPosFloor.y & ~1)) != 0){
+      break;
+    }
+    SideDistance += FloatMask * AbsRayInverse;
+  }
+  return RaytraceResult4(false, i_RayPosFloor, FloatMask);
+}
+
+fn Raytrace16(p_RayOrigin : vec3<f32>, Normal : vec3<f32>) -> RaytraceResult16{
+  var RayOrigin = p_RayOrigin * vec3<f32>(.25, .5, .25);
+  var SideDistance = (HalfRaySignPlusHalf - fract(RayOrigin)) * RayInverse_Flat;
+  var i_RayPosFloor = vec3<i32>(RayOrigin);
+
+  let Min16 = i_Min >> vec3<u32>(2, 1, 2);
+  let Max16 = i_Max >> vec3<u32>(2, 1, 2);
+
+  var FloatMask = abs(Normal);
+  CurrentBits4 = select(
+    select(
+      L3Bits4,
+      L2Bits4,
+      i_RayPosFloor.y < 6
+    ),
+    select(
+      L1Bits4,
+      L0Bits4,
+      i_RayPosFloor.y < 2
+    ),
+    i_RayPosFloor.y < 4
+  );
+
+  if(IsSolid16(i_RayPosFloor)){
+    let Offset4 = ((CompressedAllocations >> u32(30 - (i_RayPosFloor.y >> 1) * 7)) & 127u) + countOneBits(CurrentBits4 & ~(0xffffffffu << u32(((i_RayPosFloor.y & 1) << 4) | (i_RayPosFloor.z << 2) | i_RayPosFloor.x)));
+
+    Bits1 = Data[Bits1Start + Offset4];
+
+    let Result = Raytrace4(fract(RayOrigin) * vec3(4., 2., 4.), FloatMask);
+    FloatMask = Result.FloatMask;
+    if(Result.HitVoxel){
+      return RaytraceResult16(true, (i_RayPosFloor << vec3<u32>(2, 1, 2)) | Result.RayPosFloor, FloatMask);
+    }
+
+    FloatMask = step(SideDistance, min(SideDistance.yxy, SideDistance.zzx));
+    SideDistance += FloatMask * AbsRayInverse_Flat;
+    i_RayPosFloor += vec3<i32>(FloatMask * RaySign);
+  }
+
+  for(var i = 0; i < 14; i++){
+    if(any(i_RayPosFloor < Min16) || any(i_RayPosFloor > Max16)){
+      break;
+    }
+    CurrentBits4 = select(
+      select(
+        L3Bits4,
+        L2Bits4,
+        i_RayPosFloor.y < 6
+      ),
+      select(
+        L1Bits4,
+        L0Bits4,
+        i_RayPosFloor.y < 2
+      ),
+      i_RayPosFloor.y < 4
+    );
+    if(IsSolid16(i_RayPosFloor)){
+
+      let Offset4 = ((CompressedAllocations >> u32(30 - (i_RayPosFloor.y >> 1) * 7)) & 127u) + countOneBits(CurrentBits4 & ~(0xffffffffu << u32(((i_RayPosFloor.y & 1) << 4) | (i_RayPosFloor.z << 2) | i_RayPosFloor.x)));
+
+      Bits1 = Data[Bits1Start + Offset4];
+
+      let Distance = dot(SideDistance - AbsRayInverse_Flat, FloatMask);
+      let CurrentRayPosition = RayOrigin + RayDirection_Flat * Distance + (RaySign * FloatMask * 140e-7);
+
+      let Result = Raytrace4(fract(CurrentRayPosition) * vec3(4., 2., 4.), FloatMask);
+      FloatMask = Result.FloatMask;
+      if(Result.HitVoxel){
+        return RaytraceResult16(true, (i_RayPosFloor << vec3<u32>(2, 1, 2)) | Result.RayPosFloor, FloatMask);
+      }
+    }
+    FloatMask = step(SideDistance, min(SideDistance.yxy, SideDistance.zzx));
+    SideDistance += FloatMask * AbsRayInverse_Flat;
+    i_RayPosFloor += vec3<i32>(FloatMask * RaySign);
+  }
+  return RaytraceResult16(false, vec3<i32>(0), vec3<f32>(0));
+}
+
+
+
 fn ApplyFont(Pixel : vec2<u32>, Number : u32) -> bool{
   let FontCoords = vec2<u32>(15u - Pixel.x, Pixel.y) + vec2<u32>(0xffffffff, 0xfffffffc);
   if(any(FontCoords >= vec2<u32>(14, 8))){
@@ -245,10 +391,17 @@ fn TileProcessingMain(
 
 
     let FloatPixel = vec2<f32>(Pixel.xy) / Uniforms.Resolution;
-    let RayDirection = mix(mix(Uniforms.RayDirectionHL, Uniforms.RayDirectionLL, FloatPixel.x), mix(Uniforms.RayDirectionHH, Uniforms.RayDirectionLH, FloatPixel.x), FloatPixel.y);
-    let InverseRayDirection = 1. / RayDirection;
+    RayDirection = mix(mix(Uniforms.RayDirectionHL, Uniforms.RayDirectionLL, FloatPixel.x), mix(Uniforms.RayDirectionHH, Uniforms.RayDirectionLH, FloatPixel.x), FloatPixel.y);
+    RayInverse = 1. / RayDirection;
 
-    var Done : bool = false;
+    RayDirection_Flat = normalize(RayDirection * vec3<f32>(1., 2., 1.));
+    RayInverse = 1. / RayDirection;
+    AbsRayInverse = abs(RayInverse);
+    RayInverse_Flat = 1. / RayDirection_Flat;
+    AbsRayInverse_Flat = abs(RayInverse_Flat);
+    RaySign = sign(RayDirection);
+    i_RaySign = vec3<i32>(RaySign);
+    HalfRaySignPlusHalf = RaySign * .5 + .5;
 
     var Colour = vec4<f32>(0., 0., 0., 1.);//saturate(vec4<f32>((f32(TilesCount) - 64.) / 32., (f32(TilesCount) - 32) / 32., f32(TilesCount) / 32., 1.));
     var Depth = 3.4028234e38;
@@ -317,14 +470,13 @@ fn TileProcessingMain(
         let MinPos = Position + vec3<f32>(Min_u);
         let MaxPos = Position + vec3<f32>(Max_u);
 
-        let InverseCuboidSize = 1. / (MaxPos - MinPos);
-        let PositionOffset = Uniforms.CameraPosition - MinPos;
+        let PositionOffset = Uniforms.CameraPosition - Position;
 
         let MinPosMinusRayOrigin = MinPos - Uniforms.CameraPosition;
         let MaxPosMinusRayOrigin = MaxPos - Uniforms.CameraPosition;
 
-        let t024 = MinPosMinusRayOrigin * InverseRayDirection;
-        let t135 = MaxPosMinusRayOrigin * InverseRayDirection;
+        let t024 = MinPosMinusRayOrigin * RayInverse;
+        let t135 = MaxPosMinusRayOrigin * RayInverse;
 
         let ComponentMin = min(t024, t135);
         let ComponentMax = max(t024, t135);
@@ -334,16 +486,40 @@ fn TileProcessingMain(
 
         let Hit = tmax >= 0 && tmin <= tmax;
 
-        let HitCoordinate = (PositionOffset + tmin * RayDirection) * InverseCuboidSize;
+        let HitCoordinate = PositionOffset + tmin * RayDirection;
 
 
 
-        if(Hit){
-          Done = true;
-          if(tmin < Depth){
+        if(Hit && tmin < Depth){
+          CompressedAllocations = Data[Region16_HI + 3u];
+          let Temp = Data[Region16_HI + 2u];
+
+          i_Min = vec3<i32>(vec3<u32>(Temp & 15u, (Temp >> 4) & 15u, (Temp >> 8) & 15u));
+          i_Max = vec3<i32>(vec3<u32>((Temp >> 12) & 15u, (Temp >> 16) & 15u, (Temp >> 20) & 15u));
+
+          f_Min = vec3<f32>(i_Min);
+          f_Max = vec3<f32>(i_Max);
+
+          L0Bits4 = Data[Region16_HI + 4u];
+          L1Bits4 = Data[Region16_HI + 5u];
+          L2Bits4 = Data[Region16_HI + 6u];
+          L3Bits4 = Data[Region16_HI + 7u];
+
+          Bits1Start = Region16_HI + 8u;
+
+          var Epsilon = 11331e-7;
+
+          //TODO: I need to find a better way of doing this
+          let Normal = vec3<f32>(abs(HitCoordinate - f_Min) < vec3<f32>(Epsilon)) + vec3<f32>(abs(HitCoordinate - f_Max - 1.) < vec3<f32>(Epsilon));
+
+          let Result = Raytrace16(round(HitCoordinate) * (Normal + RaySign * 0.00001) + HitCoordinate * (1. - Normal), Normal);
+
+          if(Result.HitVoxel){
             Depth = tmin;
-            Colour = vec4<f32>(HitCoordinate.xyz, 1.);
+            Colour = vec4<f32>(Result.FloatMask, 1.);
           }
+
+
         }
       }
 
@@ -351,11 +527,6 @@ fn TileProcessingMain(
       if(TilesCount <= TileInfoSize){
         break;
       }
-
-
-
-
-
     }
     workgroupBarrier();
 
