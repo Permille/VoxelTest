@@ -516,9 +516,6 @@ fn TileProcessingMain(
 
 
         if(Hit && tmin < Depth){
-          Depth = tmin;
-          Colour = vec4<f32>(HitCoordinate, 1.);
-          /*
           CompressedAllocations = Data[Region16_HI + 3u];
           let Temp = Data[Region16_HI + 2u];
 
@@ -550,7 +547,7 @@ fn TileProcessingMain(
             Depth = tmin;
             Colour = vec4<f32>(Result.FloatMask, 1.);
           }
-          */
+
 
         }
       }

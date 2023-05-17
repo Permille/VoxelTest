@@ -30,9 +30,9 @@ class Main{
     Canvas.style.display = "block";
 
     this.Camera = new Camera;
-    this.Renderer = new Renderer(Canvas, this.Camera, this.Memory);
-    //this.Renderer = new WebGPURenderer(Canvas, this.Camera, this.Memory);
-    //this.Renderer.Initialise();
+    //this.Renderer = new Renderer(Canvas, this.Camera, this.Memory);
+    this.Renderer = new WebGPURenderer(Canvas, this.Camera, this.Memory);
+    this.Renderer.Initialise();
     this.KeyboardControls = new KeyboardControls(this.Camera);
     this.MouseControls = new MouseControls(this.Camera, Canvas);
     this.DebugInfo = new DebugInfo;
