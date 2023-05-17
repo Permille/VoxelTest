@@ -15,7 +15,7 @@ export default class WebGPURenderer{
     this.Frames = 0;
     this.Events = new EventTarget;
 
-    this.FOV = 100.;
+    this.FOV = 110.;
     this.Near = 1.;
     this.Far = 2.;
 
@@ -81,14 +81,14 @@ export default class WebGPURenderer{
     });
 
     void function Load(){
-      if(window.performance.now() < 25000) window.setTimeout(Load.bind(this), 2000);
+      if(window.performance.now() < 7000) window.setTimeout(Load.bind(this), 2000);
       console.time();
       this.Device.queue.writeBuffer(this.DataBuffer, 0, this.Memory.u32, 0, this.Memory.u32.length);
       console.timeEnd();
     }.call(this);
 
     this.TileInfoBuffer = null;
-    this.TileInfoBufferSize = 33554432;
+    this.TileInfoBufferSize = 67108864;
 
     this.TilesStartBuffer = null;
     this.TilesStartBufferSize = 0;
@@ -241,6 +241,32 @@ export default class WebGPURenderer{
     this.ClearTileInfoBufferBindGroupLayout = this.Device.createBindGroupLayout({
       "entries": [
         {
+          "binding": 2,
+          "visibility": GPUShaderStage.COMPUTE,
+          "buffer": {
+            "type": "uniform"
+          }
+        },
+        {
+          "binding": 3,
+          "visibility": GPUShaderStage.COMPUTE,
+          "buffer": {
+            "type": "storage"
+          }
+        },
+        {
+          "binding": 8,
+          "visibility": GPUShaderStage.COMPUTE,
+          "buffer": {
+            "type": "storage"
+          }
+        }
+      ]
+    });
+
+    this.ClearTilesStartBindGroupLayout = this.Device.createBindGroupLayout({
+      "entries": [
+        {
           "binding": 6,
           "visibility": GPUShaderStage.COMPUTE,
           "buffer": {
@@ -261,9 +287,21 @@ export default class WebGPURenderer{
         }
       }
     });
-    this.ClearTilesStartBufferPipeline = this.Device.createComputePipeline({
+    this.SortTileInfoBufferPipeline = this.Device.createComputePipeline({
       "layout": this.Device.createPipelineLayout({
         "bindGroupLayouts": [this.ClearTileInfoBufferBindGroupLayout]
+      }),
+      "compute": {
+        "module": this.ClearTileInfoBufferShaderModule,
+        "entryPoint": "BitonicSortBuffer",
+        "constants": {
+          //"Test": 0
+        }
+      }
+    });
+    this.ClearTilesStartBufferPipeline = this.Device.createComputePipeline({
+      "layout": this.Device.createPipelineLayout({
+        "bindGroupLayouts": [this.ClearTilesStartBindGroupLayout]
       }),
       "compute": {
         "module": this.ClearTileInfoBufferShaderModule,
@@ -479,7 +517,19 @@ export default class WebGPURenderer{
       "layout": this.ClearTileInfoBufferBindGroupLayout,
       "entries": [
         {
-          "binding": 6,
+          "binding": 2,
+          "resource": {
+            "buffer": this.UniformBuffer
+          }
+        },
+        {
+          "binding": 3,
+          "resource": {
+            "buffer": this.AtomicListIndicesBuffer
+          }
+        },
+        {
+          "binding": 8,
           "resource": {
             "buffer": this.TileInfoBuffer
           }
@@ -488,7 +538,7 @@ export default class WebGPURenderer{
     });
 
     this.ClearTilesStartBufferBindGroup = this.Device.createBindGroup({
-      "layout": this.ClearTileInfoBufferBindGroupLayout,
+      "layout": this.ClearTilesStartBindGroupLayout,
       "entries": [
         {
           "binding": 6,
@@ -633,8 +683,10 @@ export default class WebGPURenderer{
     ClearTileInfoBufferPassEncoder.setPipeline(this.ClearTileInfoBufferPipeline);
     ClearTileInfoBufferPassEncoder.setBindGroup(0, this.ClearTileInfoBufferBindGroup);
 
-    ClearTileInfoBufferPassEncoder.dispatchWorkgroups(256, this.TileInfoBufferSize >> 20, 1);
+    ClearTileInfoBufferPassEncoder.dispatchWorkgroups(256, 256, 1); //65536 tiles to be cleared
     ClearTileInfoBufferPassEncoder.end();
+
+
 
     const ClearTilesStartBufferBindGroup = CommandEncoder.beginComputePass();
     ClearTilesStartBufferBindGroup.setPipeline(this.ClearTilesStartBufferPipeline);
@@ -656,11 +708,20 @@ export default class WebGPURenderer{
     RasterizationPassEncoder.dispatchWorkgroups((this.RenderInstances + 63) >> 8, 1, 1);
     RasterizationPassEncoder.end();
 
+
+    const SortTileInfoBufferPassEncoder = CommandEncoder.beginComputePass();
+    SortTileInfoBufferPassEncoder.setPipeline(this.SortTileInfoBufferPipeline);
+    SortTileInfoBufferPassEncoder.setBindGroup(0, this.ClearTileInfoBufferBindGroup);
+
+    SortTileInfoBufferPassEncoder.dispatchWorkgroups(256, 256, 1); //65536 tiles to be sorted
+    SortTileInfoBufferPassEncoder.end();
+
+
     const TileProcessingPassEncoder = CommandEncoder.beginComputePass();
     TileProcessingPassEncoder.setPipeline(this.TileProcessingPipeline);
     TileProcessingPassEncoder.setBindGroup(0, this.TileProcessingBindGroup);
 
-    TileProcessingPassEncoder.dispatchWorkgroups((window.innerWidth + 15) >> 4, (window.innerHeight + 15) >> 4, 1);
+    TileProcessingPassEncoder.dispatchWorkgroups(512, 1, 1);
     TileProcessingPassEncoder.end();
 
     const DrawingPassEncoder = CommandEncoder.beginRenderPass({

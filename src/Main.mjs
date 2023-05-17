@@ -30,18 +30,18 @@ class Main{
     Canvas.style.display = "block";
 
     this.Camera = new Camera;
-    //this.Renderer = new Renderer(Canvas, this.Camera, this.Memory);
-    this.Renderer = new WebGPURenderer(Canvas, this.Camera, this.Memory);
-    this.Renderer.Initialise();
+    this.Renderer = new Renderer(Canvas, this.Camera, this.Memory);
+    //this.Renderer = new WebGPURenderer(Canvas, this.Camera, this.Memory);
+    //this.Renderer.Initialise();
     this.KeyboardControls = new KeyboardControls(this.Camera);
     this.MouseControls = new MouseControls(this.Camera, Canvas);
     this.DebugInfo = new DebugInfo;
 
-    this.Camera.RotationX = 8.6109999999999887;//8.619000000000012;
-    this.Camera.RotationY = 1.0640000000000025;//0.5480000000000046;
-    this.Camera.PositionX = 21.158676800640972;//-10.1831588486443;
-    this.Camera.PositionY = 1306.6745001811541;//1110.6695000071086;
-    this.Camera.PositionZ = 29.649728025836264;//-10.6725504788376;
+    this.Camera.RotationX = 8.619000000000012;
+    this.Camera.RotationY = 0.5480000000000046;
+    this.Camera.PositionX = -10.1831588486443;
+    this.Camera.PositionY = 2077.4294999975718;
+    this.Camera.PositionZ = -10.6725504788376;
     this.KeyboardControls.MovementSpeed = 1.;
 
     //this.Inspector = new Inspector;
@@ -83,7 +83,7 @@ class Main{
 
     void function Load(){
       window.requestAnimationFrame(Load.bind(this));
-      this.Renderer.Render();
+      for(let i = 0; i < 1; ++i) this.Renderer.Render();
     }.bind(this)();
   }
   GetUsedMemory(){

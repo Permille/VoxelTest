@@ -134,4 +134,13 @@ void main(){
     outColor = Colours[Type];
   }
   outColor.xyz *= length(vec3(.8, 1., .9) * vec3(CompressedSide == 1u, CompressedSide == 2u, CompressedSide == 3u));
+
+  //Shows height
+  /*uvec3 AbsolutePos = (uvec3(Region128CoordinateCompressed, Region128CoordinateCompressed >> 5, Region128CoordinateCompressed >> 10) & 31u) << 7 |
+                      (uvec3(Region16CoordinateCompressed, Region16CoordinateCompressed >> 3, Region16CoordinateCompressed >> 6) & 7u) << 4
+                  | Pos;
+
+  outColor.xyz = vec3(.4, .7, .9) * float(int(AbsolutePos.y)) / 768.;
+  outColor.xyz *= length(vec3(.8, 1., .9) * vec3(CompressedSide == 1u, CompressedSide == 2u, CompressedSide == 3u));
+  outColor.w = 1.;*/
 }

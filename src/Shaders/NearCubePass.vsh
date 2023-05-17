@@ -33,6 +33,6 @@ void main(){
   vec2 Vertex = Vertices[gl_VertexID];
   gl_Position = vec4(Vertex, 0., 1.);
   RayDirection = vec3(-Vertex.x * (iResolution.x / iResolution.y), Vertex.y, 1. / tan(iFOV / 2.));
-  RayDirection *= RotateX(-iCameraRotation.y);
+  RayDirection *= RotateX(iCameraRotation.y);
   RayDirection *= RotateY(3.14159 - iCameraRotation.x);
 }
