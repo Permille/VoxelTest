@@ -214,8 +214,8 @@ export default class Renderer{
     mat4.perspective(ProjectionMatrix, (this.FOV * Math.PI) / 180., this.Canvas.width / this.Canvas.height, this.Near, this.Far);
 
     const ModelViewMatrix = mat4.create();
-    mat4.rotate(ModelViewMatrix, ModelViewMatrix, -this.Camera.RotationY, [1, 0, 0]);
-    mat4.rotate(ModelViewMatrix, ModelViewMatrix, this.Camera.RotationX, [0, 1, 0]);
+    mat4.rotateX(ModelViewMatrix, ModelViewMatrix, -this.Camera.RotationY);
+    mat4.rotateY(ModelViewMatrix, ModelViewMatrix, this.Camera.RotationX);
     mat4.translate(ModelViewMatrix, ModelViewMatrix, [-this.Camera.PositionX, -this.Camera.PositionY, -this.Camera.PositionZ]);
 
     const ModelViewProjectionMatrix = mat4.create();
