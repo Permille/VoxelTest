@@ -7,15 +7,28 @@
     outline: 1px solid black;
     outline-offset: -8px;
 }
+.CLASS-Wrapper > div{
+    backdrop-filter: blur(3px);
+}
 .CLASS-TitleBar{
-    background-color: rgba(22, 175, 255, 0.7);
+    background-color: #2BB8FF8F;
     border-bottom: 1px solid black;
-    padding: 3px;
+    height: 32px;
+    display: flex;
+    align-items: center;
     user-select: none;
 }
 .CLASS-TitleText{
-    color: #ffffff;
-    padding: 1px 2px 1px 3px;
+    color: #000000;
+    margin-inline: 10px auto;
+    padding: 1px 2px 3px 2px;
+}
+.CLASS-TitleBar > img{
+    height: 32px;
+    display: inline-block;
+}
+.CLASS-TitleBar > img:hover{
+    backdrop-filter: brightness(.8);
 }
 .CLASS-Body{
     background-color: #0000007f;

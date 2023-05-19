@@ -19,6 +19,7 @@ export default class SVGGraph{
   }){
     [this.Element, this.ID] = HTML("SVGGraph", undefined, true);
     CSS("SVGGraph");
+    this.IsDestroyed = false;
     this.Title = Title;
     this.Unit = Unit;
     this.GeneratorFunction = GeneratorFunction;
@@ -84,16 +85,22 @@ export default class SVGGraph{
     this.Render();
 
     void async function Update(){
-      while(true){
+      while(!this.IsDestroyed){
         await new DeferredPromise({"Timeout": this.UpdateInterval, "Throw": false});
         this.AddDataPoint(this.GeneratorFunction());
       }
     }.call(this);
     void function Render(){
+      if(this.IsDestroyed) return;
       if(this.RenderInterval <= 20) window.requestAnimationFrame(Render.bind(this));
       else window.setTimeout(Render.bind(this), this.RenderInterval);
       this.Render();
     }.call(this);
+  }
+  Destroy(){
+    this.IsDestroyed = true;
+    this.IntersectionObserver.disconnect();
+    this.Element.remove();
   }
   ConvertNumberToText(n){
     return "" + ((Math.abs(n) < 1e-4 || Math.abs(n) > 1e6) && n !== 0 ? n.toExponential(5).replace(/\.([0-9]*[1-9])?0*/g, ".$1").replace(/\.e/, ".0e") : Number.parseFloat(n.toFixed(5)));

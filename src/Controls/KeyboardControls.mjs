@@ -33,6 +33,7 @@ export default class KeyboardControls{
     return this.PressedKeys.get(Key) ?? false;
   }
   HandleKeyDown(Event){
+    console.log(Event);
     this.PressedKeys.set(Event.code, true);
   }
   HandleKeyUp(Event){

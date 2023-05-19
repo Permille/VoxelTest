@@ -35,7 +35,18 @@ class Main{
     this.MouseControls = new MouseControls(this.Camera, Canvas);
     this.DebugInfo = new DebugInfo;
 
-    this.Inspector = new Inspector;
+
+    AddEventListener(document, "keydown", function(){
+      let InspectorInstance = null;
+      return function(Event){
+        if(Event.code !== "F10") return;
+        if(InspectorInstance === null || InspectorInstance.IsDestroyed){
+          InspectorInstance = new Inspector;
+        }
+      }
+    }());
+
+
 
     this.Workers = [];
     for(let i = 0; i < 1; ++i){

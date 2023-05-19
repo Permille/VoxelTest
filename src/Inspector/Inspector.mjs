@@ -3,12 +3,21 @@ import CSS from "./style.css";
 import WindowFrame from "../Libraries/WindowFrame/WindowFrame.mjs";
 import SVGGraph from "../Libraries/SVGGraph/SVGGraph.mjs";
 import * as M from "./../Constants/Memory.mjs";
+import {AddEventListener, RemoveEventListener} from "../Events.mjs";
 export default class Inspector{
   constructor(){
     [this.Element, this.ID] = HTML("Inspector");
     CSS("Inspector");
+    this.IsDestroyed = false;
     this.Frame = new WindowFrame(600, 400, false);
-    this.Frame.SetBody(this.Element)
+    this.Frame.SetTitle("Inspector");
+    this.Frame.SetBody(this.Element);
+
+    this.CloseEventID = AddEventListener(this.Frame.Events, "Close", function(){
+      this.Destroy();
+    }.bind(this));
+
+
 
     this.GraphSection = this.Element.querySelector(`#${this.ID}-Graphs`);
 
@@ -37,23 +46,33 @@ export default class Inspector{
         "Title": "Generated cubes per second",
         "Unit": "cubes / s",
         "GeneratorFunction": function(){
-          let LastUpdate = 0;
-          let LastCubes = 0;
+          let LastUpdate = -1;
+          let LastCubes = -1;
           return function(){
             const Now = window.performance.now();
             const Cubes = Atomics.load(Main.Memory.u32, M.I_INFO_LOADED_CUBES_COUNTER);
             const CubesPerSecond = Math.floor((Cubes - LastCubes) / (Now - LastUpdate) * 1000.);
+            let Uninitialised = LastUpdate === -1;
             LastUpdate = Now;
             LastCubes = Cubes;
-            return CubesPerSecond;
+            return Uninitialised ? 0 : CubesPerSecond;
           };
         }(),
         "Colour": "rgb(39,109,255)",
         "UpdateIntervalOptions": {"DefaultValue": 100}
       })
     ];
-    window.setTimeout(function(){
+    //I need to use setTimeout because otherwise the IntersectionObserver doesn't work
+    window.setTimeout(async function(){
+      await window.InitialisedMain;
       for(const Graph of this.Graphs) this.GraphSection.appendChild(Graph.Element);
-    }.bind(this), 1);
+    }.bind(this));
+  }
+  Destroy(){
+    this.IsDestroyed = true;
+    RemoveEventListener(this.CloseEventID);
+    for(const Graph of this.Graphs){
+      Graph.Destroy();
+    }
   }
 };
