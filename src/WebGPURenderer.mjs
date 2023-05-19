@@ -659,8 +659,8 @@ export default class WebGPURenderer{
     this.UniformDataView.setFloat32(224, RayDirectionHH[0], true);
     this.UniformDataView.setFloat32(228, RayDirectionHH[1], true);
     this.UniformDataView.setFloat32(232, RayDirectionHH[2], true);
-    this.UniformDataView.setFloat32(240, this.FOV, true);
-    this.UniformDataView.setUint32(244, this.TileInfoBufferSize, true);
+    this.UniformDataView.setFloat32(236, this.FOV, true);
+    this.UniformDataView.setUint32(240, this.TileInfoBufferSize, true);
     this.Device.queue.writeBuffer(this.UniformBuffer, 0, this.UniformDataView.buffer, this.UniformDataView.byteOffset, this.UniformDataView.byteLength);
 
 

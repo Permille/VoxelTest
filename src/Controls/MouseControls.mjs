@@ -6,7 +6,7 @@ export default class MouseControls{
     this.MouseElement = MouseElement;
     this.InvertY = true;
     this.IsPointerLocked = false;
-    this.MouseSensitivity = 1.;
+    this.MouseSensitivity = 2.;
 
     this.HandleClickID = AddEventListener(this.MouseElement, "click", this.HandleClick.bind(this));
     this.HandlePointerLockChangeID = AddEventListener(document, "pointerlockchange", this.HandlePointerLockChange.bind(this));
@@ -31,7 +31,7 @@ export default class MouseControls{
   }
   HandleMouseMove(Event){
     if(!this.IsPointerLocked) return;
-    this.Camera.RotationX += Event.movementX / 1000.;
+    this.Camera.RotationX += Event.movementX / 1000. * this.MouseSensitivity;
     this.Camera.RotationY += Event.movementY / 1000. * (this.InvertY ? -1. : 1.) * this.MouseSensitivity;
   }
   Destroy(){
