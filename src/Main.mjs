@@ -1,5 +1,6 @@
 import "./index.html?copy";
 import "./Escape.ttf?copy";
+import "./LolaMono.woff2?copy";
 import "./GlobalStyle/GlobalStyle.mjs";
 import MemoryManager from "./MemoryManager.mjs";
 import * as M from "./Constants/Memory.mjs";
@@ -12,20 +13,17 @@ import {AddEventListener} from "./Events.mjs";
 import DebugInfo from "./DebugInfo/DebugInfo.mjs";
 import DeferredPromise from "./Libraries/DeferredPromise.mjs";
 import Inspector from "./Inspector/Inspector.mjs";
-import {LOAD_REGIONS} from "./Constants/Worker.mjs";
-import {I_LOADED_VOLUME_BOUNDS_START} from "./Constants/Memory.mjs";
 
 class Main{
   constructor(){
     this.MemorySize = 1 << 28; //256 MB
-    //this.MemoryBuffer = new SharedArrayBuffer(this.MemorySize);
     this.WasmMemory = new WebAssembly.Memory({"initial": this.MemorySize >> 16, "maximum": this.MemorySize >> 16, "shared": true});
     this.MemoryBuffer = this.WasmMemory.buffer;
     this.Memory = new MemoryManager(this.MemoryBuffer);
     this.Memory.InitialiseMemory();
 
     const Canvas = document.createElement("canvas");
-    document.body.appendChild(Canvas);
+    document.body.append(Canvas);
     document.body.style.margin = "0";
     Canvas.style.display = "block";
 
@@ -85,14 +83,10 @@ class Main{
 
     void function Load(){
       window.requestAnimationFrame(Load.bind(this));
-      this.Renderer.Render();
+      for(let i = 0; i < 1; ++i) this.Renderer.Render();
     }.bind(this)();
   }
-  GetUsedMemory(){
-
-  }
 }
-
 
 AddEventListener(window, "load", function(){
   window.InitialisedMain = new DeferredPromise;

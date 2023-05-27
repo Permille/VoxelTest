@@ -47,6 +47,7 @@ export default class Renderer{
     this.VoxelShaderProgram = this.InitShaderProgram(CubePassVsh, CubePassFsh);
     this.ProcessShaderProgram = this.InitShaderProgram(FullscreenVsh, VoxelPassFsh);
     this.ClearBufferShaderProgram = this.InitShaderProgram(FullscreenVsh, Clear2u32Fsh);
+
     this.NearCubeUniforms = this.GetUniformLocations(this.NearCubeShaderProgram, [
       "iFOV",
       "iCameraPosition",
@@ -55,8 +56,8 @@ export default class Renderer{
       "iResolution"
     ]);
     this.VoxelUniforms = this.GetUniformLocations(this.VoxelShaderProgram, [
-      "iModelViewMatrix",
-      "iProjectionMatrix",
+      //"iModelViewMatrix",
+      //"iProjectionMatrix",
       "iModelViewProjectionMatrix",
       "iCameraPosition",
       "iData",
@@ -128,13 +129,18 @@ export default class Renderer{
     gl.uniform1i(this.VoxelUniforms.iRenderList, 1);
 
 
+    gl.useProgram(this.ClearBufferShaderProgram);
+
+    gl.bindAttribLocation(this.ClearBufferShaderProgram, 0, "vEmpty");
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.EmptyBuffer);
+    gl.vertexAttribPointer(0, 1, gl.UNSIGNED_INT, false, 0, 0);
+    gl.enableVertexAttribArray(0);
 
 
     gl.useProgram(this.ProcessShaderProgram);
     gl.uniform1i(this.ProcessUniforms.iVoxelPassTexture, 8);
 
     gl.uniform1i(this.ProcessUniforms.iData, 0);
-
 
     gl.bindAttribLocation(this.ProcessShaderProgram, 0, "vEmpty");
     gl.bindBuffer(gl.ARRAY_BUFFER, this.EmptyBuffer);
@@ -304,7 +310,6 @@ export default class Renderer{
     gl.disable(gl.CULL_FACE);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
 
-
     gl.useProgram(this.VoxelShaderProgram);
 
     gl.enable(gl.DEPTH_TEST);
@@ -312,7 +317,7 @@ export default class Renderer{
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
 
-    gl.uniformMatrix4fv(
+    /*gl.uniformMatrix4fv(
       this.VoxelUniforms.iProjectionMatrix,
       false,
       ProjectionMatrix
@@ -321,7 +326,7 @@ export default class Renderer{
       this.VoxelUniforms.iModelViewMatrix,
       false,
       ModelViewMatrix
-    );
+    );*/
     gl.uniformMatrix4fv(
       this.VoxelUniforms.iModelViewProjectionMatrix,
       false,

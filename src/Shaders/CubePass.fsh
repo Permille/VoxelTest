@@ -207,7 +207,7 @@ void main(){
   uint Sign = uint(any(lessThan(abs(Result.FloatMask) * RaySign, vec3(0.)))); //1 is negative, 0 is positive
 
   outColor = uvec2(
-  Region16CoordinateCompressed << 22 | Region128CoordinateCompressed << 3 | Sign << 2 | (Side.x + Side.y * 2u + Side.z * 3u),
-  Result.RayPosOffset.z << 8 | Result.RayPosOffset.y << 4 | Result.RayPosOffset.x
+    Region16CoordinateCompressed << 22 | Region128CoordinateCompressed << 3 | Sign << 2 | (Side.x + Side.y * 2u + Side.z * 3u),
+    Result.RayPosOffset.z << 8 | Result.RayPosOffset.y << 4 | Result.RayPosOffset.x
   );
 }

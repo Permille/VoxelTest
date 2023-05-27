@@ -80,7 +80,7 @@ export default class SVGGraph{
     });
     this.IntersectionObserver.observe(this.Element);
 
-    this.ValidXDivisions = [1, 2, 5, 10, 20, 30, 60, 90, 120, 300, 600, 900, 1800, 3600];
+    this.ValidXDivisions = [1, 2, 3, 5, 10, 20, 30, 60, 90, 120, 300, 600, 900, 1800, 3600];
 
     this.Render();
 
@@ -198,7 +198,7 @@ export default class SVGGraph{
     return .2;
   }
   GetXStep(XRange){
-    const RoughStep = XRange / 5.;
+    const RoughStep = XRange / 4.;
 
     const Logged = RoughStep / 1000.;
     for (let i = 0; i < this.ValidXDivisions.length - 1; ++i) {
